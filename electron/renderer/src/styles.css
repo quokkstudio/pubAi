@@ -881,6 +881,13 @@ body {
   cursor: pointer;
 }
 
+.settings-binary-status {
+  font-size: 11px;
+  color: #9aa4b3;
+  padding: 0 2px;
+  word-break: break-all;
+}
+
 .codex-settings-inline {
   border-bottom: 1px solid #2b2b2b;
   background: #161616;

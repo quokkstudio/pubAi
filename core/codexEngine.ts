@@ -42,6 +42,8 @@ export interface CodexMcpServer {
 export interface CodexState {
   codexHome: string;
   configPath: string;
+  codexBinaryPath: string;
+  codexBinaryDetected: boolean;
   loggedIn: boolean;
   loginMessage: string;
   mcpServers: CodexMcpServer[];
@@ -65,6 +67,10 @@ interface McpPresetSpec {
   args: string[];
 }
 
+interface CodexLocalSettings {
+  codexBinaryPath?: string;
+}
+
 const MCP_PRESETS: Record<CodexMcpPreset, McpPresetSpec> = {
   playwright: {
     name: 'playwright',
@@ -86,6 +92,10 @@ function getCodexConfigPath(codexHome: string): string {
   return path.join(codexHome, 'config.toml');
 }
 
+function getCodexSettingsPath(codexHome: string): string {
+  return path.join(codexHome, 'devmanager-settings.json');
+}
+
 async function ensureCodexHome(cwd: string): Promise<{ codexHome: string; configPath: string }> {
   const codexHome = getCodexHome(cwd);
   const configPath = getCodexConfigPath(codexHome);
@@ -94,6 +104,72 @@ async function ensureCodexHome(cwd: string): Promise<{ codexHome: string; config
     .access(configPath)
     .catch(async () => fs.writeFile(configPath, '', 'utf-8'));
   return { codexHome, configPath };
+}
+
+async function readLocalSettings(codexHome: string): Promise<CodexLocalSettings> {
+  const settingsPath = getCodexSettingsPath(codexHome);
+  const raw = await fs.readFile(settingsPath, 'utf-8').catch(() => '');
+  if (!raw.trim()) {
+    return {};
+  }
+  try {
+    return JSON.parse(raw) as CodexLocalSettings;
+  } catch {
+    return {};
+  }
+}
+
+async function writeLocalSettings(codexHome: string, settings: CodexLocalSettings): Promise<void> {
+  const settingsPath = getCodexSettingsPath(codexHome);
+  await fs.writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, 'utf-8');
+}
+
+async function resolveCodexBinary(cwd: string): Promise<{ codexHome: string; configPath: string; command: string }> {
+  const { codexHome, configPath } = await ensureCodexHome(cwd);
+  const settings = await readLocalSettings(codexHome);
+  const command = settings.codexBinaryPath?.trim() || 'codex';
+  return { codexHome, configPath, command };
+}
+
+async function checkCodexBinary(cwd: string): Promise<{ command: string; detected: boolean; message: string }> {
+  const { command } = await resolveCodexBinary(cwd);
+  const result = await new Promise<CodexCommandResult>((resolve, reject) => {
+    const child = spawn(command, ['--version'], {
+      cwd,
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env }
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (chunk: Buffer | string) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on('data', (chunk: Buffer | string) => {
+      stderr += chunk.toString();
+    });
+    child.once('error', (error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/ENOENT/i.test(message)) {
+        reject(new Error(`codex 실행파일을 찾을 수 없습니다. 설정에서 경로를 지정하세요. (${command})`));
+        return;
+      }
+      reject(error);
+    });
+    child.once('close', (code) => resolve({ stdout, stderr, exitCode: code ?? 1 }));
+  }).catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    return { stdout: '', stderr: message, exitCode: 1 };
+  });
+
+  const detected = result.exitCode === 0;
+  const message = detected
+    ? (result.stdout || result.stderr).trim()
+    : `codex 실행파일을 찾을 수 없습니다. 현재 경로: ${command}`;
+
+  return { command, detected, message };
 }
 
 function normalizeAttachmentPath(cwd: string, filePath: string): string {
@@ -113,10 +189,10 @@ function buildPrompt(prompt: string, attachments: string[]): string {
 }
 
 async function runCodexCommand(options: CodexCommandOptions): Promise<CodexCommandResult> {
-  const { codexHome } = await ensureCodexHome(options.cwd);
+  const { codexHome, command } = await resolveCodexBinary(options.cwd);
 
   return new Promise((resolve, reject) => {
-    const child = spawn('codex', options.args, {
+    const child = spawn(command, options.args, {
       cwd: options.cwd,
       windowsHide: true,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -164,6 +240,18 @@ function parseMcpList(rawJson: string): CodexMcpServer[] {
 
 export async function getCodexState(cwd: string): Promise<CodexState> {
   const { codexHome, configPath } = await ensureCodexHome(cwd);
+  const binaryStatus = await checkCodexBinary(cwd);
+  if (!binaryStatus.detected) {
+    return {
+      codexHome,
+      configPath,
+      codexBinaryPath: binaryStatus.command,
+      codexBinaryDetected: false,
+      loggedIn: false,
+      loginMessage: binaryStatus.message,
+      mcpServers: []
+    };
+  }
 
   const loginResult = await runCodexCommand({
     cwd,
@@ -180,10 +268,21 @@ export async function getCodexState(cwd: string): Promise<CodexState> {
   return {
     codexHome,
     configPath,
+    codexBinaryPath: binaryStatus.command,
+    codexBinaryDetected: true,
     loggedIn,
     loginMessage,
     mcpServers: mcpResult.exitCode === 0 ? parseMcpList(mcpResult.stdout) : []
   };
+}
+
+export async function setCodexBinaryPath(cwd: string, binaryPath: string): Promise<CodexState> {
+  const { codexHome } = await ensureCodexHome(cwd);
+  const settings = await readLocalSettings(codexHome);
+  const trimmed = binaryPath.trim();
+  settings.codexBinaryPath = trimmed || undefined;
+  await writeLocalSettings(codexHome, settings);
+  return getCodexState(cwd);
 }
 
 export async function loginCodexWithApiKey(cwd: string, apiKey: string): Promise<CodexState> {

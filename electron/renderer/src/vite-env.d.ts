@@ -40,6 +40,7 @@ interface DevManagerApi {
   getCodexState: (payload: { projectKey: string }) => Promise<CodexState>;
   loginCodexApiKey: (payload: { projectKey: string; apiKey: string }) => Promise<CodexState>;
   logoutCodex: (payload: { projectKey: string }) => Promise<CodexState>;
+  setCodexBinaryPath: (payload: { projectKey: string; binaryPath: string }) => Promise<CodexState>;
   setCodexMcpPreset: (payload: {
     projectKey: string;
     preset: 'playwright' | 'chrome-devtools';

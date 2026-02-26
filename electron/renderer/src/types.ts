@@ -128,6 +128,8 @@ export interface CodexMcpServer {
 export interface CodexState {
   codexHome: string;
   configPath: string;
+  codexBinaryPath: string;
+  codexBinaryDetected: boolean;
   loggedIn: boolean;
   loginMessage: string;
   mcpServers: CodexMcpServer[];

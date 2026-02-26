@@ -35,6 +35,8 @@ contextBridge.exposeInMainWorld('devManager', {
   loginCodexApiKey: (payload: { projectKey: string; apiKey: string }): Promise<unknown> =>
     ipcRenderer.invoke('codex:loginApiKey', payload),
   logoutCodex: (payload: { projectKey: string }): Promise<unknown> => ipcRenderer.invoke('codex:logout', payload),
+  setCodexBinaryPath: (payload: { projectKey: string; binaryPath: string }): Promise<unknown> =>
+    ipcRenderer.invoke('codex:setBinaryPath', payload),
   setCodexMcpPreset: (payload: { projectKey: string; preset: 'playwright' | 'chrome-devtools'; enabled: boolean }): Promise<unknown> =>
     ipcRenderer.invoke('codex:setMcpPreset', payload)
 });

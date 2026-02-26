@@ -61,6 +61,7 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
   const [lastUsage, setLastUsage] = useState<CodexRunResult['usage'] | null>(null);
   const [codexState, setCodexState] = useState<CodexState | null>(null);
   const [apiKeyInput, setApiKeyInput] = useState('');
+  const [codexBinaryInput, setCodexBinaryInput] = useState('');
 
   const activeFileContent = activeFilePath ? fileBuffers[activeFilePath] ?? '' : '';
   const isDirty = useMemo(() => Boolean(activeFilePath && dirtyFiles[activeFilePath]), [activeFilePath, dirtyFiles]);
@@ -97,6 +98,7 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
     }
     const state = await api.getCodexState({ projectKey });
     setCodexState(state);
+    setCodexBinaryInput(state.codexBinaryPath || 'codex');
   }
 
   async function openFile(relativePath: string): Promise<void> {
@@ -236,6 +238,25 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
       pushChat('system', `MCP ${preset} ${enabled ? '활성화' : '비활성화'} 완료`);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'MCP 설정 실패';
+      setErrorMessage(message);
+      pushChat('system', message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSaveCodexBinaryPath(): Promise<void> {
+    if (!api) {
+      return;
+    }
+    setBusy(true);
+    setErrorMessage('');
+    try {
+      const state = await api.setCodexBinaryPath({ projectKey, binaryPath: codexBinaryInput });
+      setCodexState(state);
+      pushChat('system', `Codex 실행 경로 저장: ${state.codexBinaryPath}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Codex 경로 저장 실패';
       setErrorMessage(message);
       pushChat('system', message);
     } finally {
@@ -489,7 +510,9 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
               <button
                 className="settings-menu-item"
                 onClick={() => {
-                  void api.openPath(codexState?.configPath ?? '');
+                  if (codexState?.configPath) {
+                    void api.openPath(codexState.configPath);
+                  }
                 }}
                 disabled={!codexState?.configPath}
               >
@@ -498,7 +521,9 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
               <button
                 className="settings-menu-item"
                 onClick={() => {
-                  void api.openPath(codexState?.codexHome ?? '');
+                  if (codexState?.codexHome) {
+                    void api.openPath(codexState.codexHome);
+                  }
                 }}
                 disabled={!codexState?.codexHome}
               >
@@ -513,6 +538,23 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
               <button className="settings-menu-item" onClick={() => pushChat('system', '단축키: Ctrl/Cmd+S 저장, Ctrl/Cmd+W 탭 닫기')}>
                 키보드 단축키
               </button>
+
+              <div className="settings-divider" />
+
+              <div className="settings-login-box">
+                <input
+                  type="text"
+                  placeholder="codex 실행파일 경로 (예: C:\\codex\\codex.exe)"
+                  value={codexBinaryInput}
+                  onChange={(event) => setCodexBinaryInput(event.target.value)}
+                />
+                <button onClick={() => void handleSaveCodexBinaryPath()} disabled={busy || !codexBinaryInput.trim()}>
+                  경로 저장
+                </button>
+              </div>
+              <div className="settings-binary-status">
+                {codexState?.codexBinaryDetected ? '실행파일 감지됨' : '실행파일 미감지'} · {codexState?.codexBinaryPath || 'codex'}
+              </div>
 
               <div className="settings-divider" />
 
@@ -638,6 +680,7 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
             <span>{reasoningLevel}</span>
             <span>{sandboxMode}</span>
             <span>{codexState?.loggedIn ? 'Logged in' : 'Logged out'}</span>
+            <span>{codexState?.codexBinaryDetected ? 'CLI OK' : 'CLI Missing'}</span>
             <span>
               사용량 {lastUsage?.inputChars ?? 0}/{lastUsage?.outputChars ?? 0}
             </span>

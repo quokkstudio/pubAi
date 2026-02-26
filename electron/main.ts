@@ -7,6 +7,7 @@ import {
   loginCodexWithApiKey,
   logoutCodex,
   runCodex,
+  setCodexBinaryPath,
   setMcpPresetEnabled,
   type CodexMcpPreset
 } from '../core/codexEngine';
@@ -371,6 +372,11 @@ app.whenReady().then(() => {
   ipcMain.handle('codex:logout', async (_, payload: { projectKey: string }) => {
     const detail = await getProjectDetail(projectsRoot, payload.projectKey);
     return logoutCodex(detail.summary.localPath);
+  });
+
+  ipcMain.handle('codex:setBinaryPath', async (_, payload: { projectKey: string; binaryPath: string }) => {
+    const detail = await getProjectDetail(projectsRoot, payload.projectKey);
+    return setCodexBinaryPath(detail.summary.localPath, payload.binaryPath);
   });
 
   ipcMain.handle(
