@@ -58,7 +58,6 @@ interface CodexCommandResult {
 interface CodexCommandOptions {
   args: string[];
   cwd: string;
-  stdinText?: string;
 }
 
 interface McpPresetSpec {
@@ -212,14 +211,17 @@ async function runCodexCommand(options: CodexCommandOptions): Promise<CodexComma
       stderr += chunk.toString();
     });
 
-    child.once('error', (error) => reject(error));
+    child.once('error', (error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/ENOENT/i.test(message)) {
+        reject(new Error(`codex 실행파일을 찾을 수 없습니다. 설정에서 경로를 지정하세요. (${command})`));
+        return;
+      }
+      reject(error);
+    });
     child.once('close', (code) => {
       resolve({ stdout, stderr, exitCode: code ?? 1 });
     });
-
-    if (options.stdinText !== undefined) {
-      child.stdin.write(options.stdinText);
-    }
     child.stdin.end();
   });
 }
@@ -285,20 +287,14 @@ export async function setCodexBinaryPath(cwd: string, binaryPath: string): Promi
   return getCodexState(cwd);
 }
 
-export async function loginCodexWithApiKey(cwd: string, apiKey: string): Promise<CodexState> {
-  const trimmedKey = apiKey.trim();
-  if (!trimmedKey) {
-    throw new Error('API 키를 입력하세요.');
-  }
-
+export async function loginCodexWithChatGPT(cwd: string): Promise<CodexState> {
   const result = await runCodexCommand({
     cwd,
-    args: ['login', '--with-api-key'],
-    stdinText: `${trimmedKey}\n`
+    args: ['login', '--device-auth']
   });
 
   if (result.exitCode !== 0) {
-    throw new Error((result.stderr || result.stdout || 'Codex 로그인 실패').trim());
+    throw new Error((result.stderr || result.stdout || 'Codex ChatGPT 로그인 실패').trim());
   }
 
   return getCodexState(cwd);

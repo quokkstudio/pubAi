@@ -32,8 +32,7 @@ contextBridge.exposeInMainWorld('devManager', {
     attachments?: string[];
   }): Promise<unknown> => ipcRenderer.invoke('codex:run', payload),
   getCodexState: (payload: { projectKey: string }): Promise<unknown> => ipcRenderer.invoke('codex:getState', payload),
-  loginCodexApiKey: (payload: { projectKey: string; apiKey: string }): Promise<unknown> =>
-    ipcRenderer.invoke('codex:loginApiKey', payload),
+  loginCodexChatGPT: (payload: { projectKey: string }): Promise<unknown> => ipcRenderer.invoke('codex:loginChatGPT', payload),
   logoutCodex: (payload: { projectKey: string }): Promise<unknown> => ipcRenderer.invoke('codex:logout', payload),
   setCodexBinaryPath: (payload: { projectKey: string; binaryPath: string }): Promise<unknown> =>
     ipcRenderer.invoke('codex:setBinaryPath', payload),

@@ -4,7 +4,7 @@ import { existsSync, promises as fs } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import {
   getCodexState,
-  loginCodexWithApiKey,
+  loginCodexWithChatGPT,
   logoutCodex,
   runCodex,
   setCodexBinaryPath,
@@ -364,9 +364,9 @@ app.whenReady().then(() => {
     return getCodexState(detail.summary.localPath);
   });
 
-  ipcMain.handle('codex:loginApiKey', async (_, payload: { projectKey: string; apiKey: string }) => {
+  ipcMain.handle('codex:loginChatGPT', async (_, payload: { projectKey: string }) => {
     const detail = await getProjectDetail(projectsRoot, payload.projectKey);
-    return loginCodexWithApiKey(detail.summary.localPath, payload.apiKey);
+    return loginCodexWithChatGPT(detail.summary.localPath);
   });
 
   ipcMain.handle('codex:logout', async (_, payload: { projectKey: string }) => {

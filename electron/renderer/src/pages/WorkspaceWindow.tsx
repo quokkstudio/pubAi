@@ -60,7 +60,6 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
   const [attachmentPaths, setAttachmentPaths] = useState<string[]>([]);
   const [lastUsage, setLastUsage] = useState<CodexRunResult['usage'] | null>(null);
   const [codexState, setCodexState] = useState<CodexState | null>(null);
-  const [apiKeyInput, setApiKeyInput] = useState('');
   const [codexBinaryInput, setCodexBinaryInput] = useState('');
 
   const activeFileContent = activeFilePath ? fileBuffers[activeFilePath] ?? '' : '';
@@ -194,12 +193,11 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
     setBusy(true);
     setErrorMessage('');
     try {
-      const state = await api.loginCodexApiKey({ projectKey, apiKey: apiKeyInput });
+      const state = await api.loginCodexChatGPT({ projectKey });
       setCodexState(state);
-      setApiKeyInput('');
-      pushChat('system', 'Codex 로그인 완료');
+      pushChat('system', 'Codex ChatGPT 로그인 완료');
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Codex 로그인 실패';
+      const message = error instanceof Error ? error.message : 'Codex ChatGPT 로그인 실패';
       setErrorMessage(message);
       pushChat('system', message);
     } finally {
@@ -582,17 +580,9 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
               <div className="settings-divider" />
 
               {!codexState?.loggedIn && (
-                <div className="settings-login-box">
-                  <input
-                    type="password"
-                    placeholder="OpenAI API Key"
-                    value={apiKeyInput}
-                    onChange={(event) => setApiKeyInput(event.target.value)}
-                  />
-                  <button onClick={() => void handleCodexLogin()} disabled={busy || !apiKeyInput.trim()}>
-                    코덱스 연결
-                  </button>
-                </div>
+                <button className="settings-menu-item" onClick={() => void handleCodexLogin()} disabled={busy}>
+                  ChatGPT로 코덱스 연결
+                </button>
               )}
 
               {codexState?.loggedIn && (

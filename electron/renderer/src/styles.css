@@ -856,31 +856,6 @@ body {
   gap: 8px;
 }
 
-.settings-login-box {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 6px;
-}
-
-.settings-login-box input {
-  height: 32px;
-  border: 1px solid #3a3a3a;
-  border-radius: 6px;
-  background: #111;
-  color: #fff;
-  padding: 0 8px;
-}
-
-.settings-login-box button {
-  border: 1px solid #2f5f8f;
-  background: #0f4672;
-  color: #fff;
-  border-radius: 6px;
-  padding: 0 10px;
-  font-size: 12px;
-  cursor: pointer;
-}
-
 .settings-binary-status {
   font-size: 11px;
   color: #9aa4b3;
