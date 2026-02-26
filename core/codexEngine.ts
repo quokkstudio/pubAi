@@ -10,7 +10,7 @@ export interface CodexRunOptions {
   cwd: string;
   prompt: string;
   model?: string;
-  reasoningLevel?: 'low' | 'medium' | 'high';
+  reasoningLevel?: 'none' | 'low' | 'medium' | 'high';
   sandboxMode?: CodexSandboxMode;
   attachments?: string[];
 }
@@ -451,6 +451,7 @@ export async function runCodex(options: CodexRunOptions): Promise<CodexRunResult
   const startedAt = new Date().toISOString();
   const cwd = path.resolve(options.cwd);
   const sandboxMode = options.sandboxMode ?? 'workspace-write';
+  const reasoningLevel = options.reasoningLevel ?? 'high';
   const outputFilePath = path.join(os.tmpdir(), `codex-last-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`);
   const attachmentPaths = (options.attachments ?? [])
     .map((filePath) => normalizeAttachmentPath(cwd, filePath))
@@ -458,6 +459,7 @@ export async function runCodex(options: CodexRunOptions): Promise<CodexRunResult
   const prompt = buildPrompt(options.prompt, attachmentPaths);
 
   const args: string[] = ['exec', '--skip-git-repo-check', '--sandbox', sandboxMode, '-C', cwd, '-o', outputFilePath];
+  args.push('-c', `reasoning_effort="${reasoningLevel}"`);
   if (options.model?.trim()) {
     args.push('-m', options.model.trim());
   }

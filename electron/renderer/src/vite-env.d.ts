@@ -33,7 +33,7 @@ interface DevManagerApi {
     projectKey: string;
     prompt: string;
     model?: string;
-    reasoningLevel?: 'low' | 'medium' | 'high';
+    reasoningLevel?: 'none' | 'low' | 'medium' | 'high';
     sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
     attachments?: string[];
   }) => Promise<CodexRunResult>;

@@ -27,7 +27,7 @@ contextBridge.exposeInMainWorld('devManager', {
     projectKey: string;
     prompt: string;
     model?: string;
-    reasoningLevel?: 'low' | 'medium' | 'high';
+    reasoningLevel?: 'none' | 'low' | 'medium' | 'high';
     sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
     attachments?: string[];
   }): Promise<unknown> => ipcRenderer.invoke('codex:run', payload),

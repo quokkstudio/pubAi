@@ -58,7 +58,7 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
   const [chatTab, setChatTab] = useState<ChatTab>('codex');
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [model, setModel] = useState('gpt-5-codex');
+  const [model, setModel] = useState('gpt-5.3-codex');
   const [reasoningLevel, setReasoningLevel] = useState<'low' | 'medium' | 'high'>('high');
   const [sandboxMode, setSandboxMode] = useState<CodexSandboxMode>('workspace-write');
   const [attachmentPaths, setAttachmentPaths] = useState<string[]>([]);
@@ -633,9 +633,11 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
               <label>
                 모델
                 <select value={model} onChange={(event) => setModel(event.target.value)}>
-                  <option value="gpt-5-codex">GPT-5-Codex</option>
-                  <option value="gpt-5">GPT-5</option>
-                  <option value="o3">o3</option>
+                  <option value="gpt-5.3-codex">GPT-5.3-Codex</option>
+                  <option value="gpt-5.2-codex">GPT-5.2-Codex</option>
+                  <option value="gpt-5.1-codex-max">GPT-5.1-Codex-Max</option>
+                  <option value="gpt-5.2">GPT-5.2</option>
+                  <option value="gpt-5.1-codex-mini">GPT-5.1-Codex-Mini</option>
                 </select>
               </label>
               <label>
@@ -704,9 +706,11 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
             <label>
               모델
               <select value={model} onChange={(event) => setModel(event.target.value)}>
-                <option value="gpt-5-codex">gpt-5-codex</option>
-                <option value="gpt-5">gpt-5</option>
-                <option value="o3">o3</option>
+                <option value="gpt-5.3-codex">GPT-5.3-Codex</option>
+                <option value="gpt-5.2-codex">GPT-5.2-Codex</option>
+                <option value="gpt-5.1-codex-max">GPT-5.1-Codex-Max</option>
+                <option value="gpt-5.2">GPT-5.2</option>
+                <option value="gpt-5.1-codex-mini">GPT-5.1-Codex-Mini</option>
               </select>
             </label>
             <label>
