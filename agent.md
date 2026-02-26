@@ -248,4 +248,9 @@ DevManager/
 [추가 요청 - 2026-02-27]
 
 - ChatGPT 로그인 시 브라우저 자동 로그인(codex login) 우선 시도, 실패 시 device-auth fallback
+
+-------------------------------------------------
+[추가 요청 - 2026-02-27]
+
+- codex login status 실패 시에도 auth.json 토큰 기반 로그인 상태 판별 보강
  

@@ -75,6 +75,11 @@ interface CodexLocalSettings {
   codexBinaryPath?: string;
 }
 
+interface CodexAuthSnapshot {
+  loggedIn: boolean;
+  authMode?: string;
+}
+
 const MCP_PRESETS: Record<CodexMcpPreset, McpPresetSpec> = {
   playwright: {
     name: 'playwright',
@@ -98,6 +103,10 @@ function getCodexConfigPath(codexHome: string): string {
 
 function getCodexSettingsPath(codexHome: string): string {
   return path.join(codexHome, 'devmanager-settings.json');
+}
+
+function getCodexAuthPath(codexHome: string): string {
+  return path.join(codexHome, 'auth.json');
 }
 
 async function ensureCodexHome(cwd: string): Promise<{ codexHome: string; configPath: string }> {
@@ -126,6 +135,27 @@ async function readLocalSettings(codexHome: string): Promise<CodexLocalSettings>
 async function writeLocalSettings(codexHome: string, settings: CodexLocalSettings): Promise<void> {
   const settingsPath = getCodexSettingsPath(codexHome);
   await fs.writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, 'utf-8');
+}
+
+async function readAuthSnapshot(codexHome: string): Promise<CodexAuthSnapshot> {
+  const authPath = getCodexAuthPath(codexHome);
+  const raw = await fs.readFile(authPath, 'utf-8').catch(() => '');
+  if (!raw.trim()) {
+    return { loggedIn: false };
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as { auth_mode?: string; tokens?: Record<string, unknown> };
+    const tokens = parsed.tokens ?? {};
+    const hasAccess = typeof tokens.access_token === 'string' && Boolean(tokens.access_token);
+    const hasRefresh = typeof tokens.refresh_token === 'string' && Boolean(tokens.refresh_token);
+    return {
+      loggedIn: hasAccess && hasRefresh,
+      authMode: parsed.auth_mode
+    };
+  } catch {
+    return { loggedIn: false };
+  }
 }
 
 async function resolveCodexBinary(cwd: string): Promise<{ codexHome: string; configPath: string; command: string }> {
@@ -248,13 +278,14 @@ function parseMcpList(rawJson: string): CodexMcpServer[] {
 export async function getCodexState(cwd: string): Promise<CodexState> {
   const { codexHome, configPath } = await ensureCodexHome(cwd);
   const binaryStatus = await checkCodexBinary(cwd);
+  const authSnapshot = await readAuthSnapshot(codexHome);
   if (!binaryStatus.detected) {
     return {
       codexHome,
       configPath,
       codexBinaryPath: binaryStatus.command,
       codexBinaryDetected: false,
-      loggedIn: false,
+      loggedIn: authSnapshot.loggedIn,
       loginMessage: binaryStatus.message,
       mcpServers: []
     };
@@ -264,8 +295,11 @@ export async function getCodexState(cwd: string): Promise<CodexState> {
     cwd,
     args: ['login', 'status']
   });
-  const loggedIn = loginResult.exitCode === 0;
-  const loginMessage = (loginResult.stdout || loginResult.stderr).trim() || (loggedIn ? 'Logged in' : 'Not logged in');
+  const cliLoggedIn = loginResult.exitCode === 0;
+  const loggedIn = cliLoggedIn || authSnapshot.loggedIn;
+  const loginMessage =
+    (loginResult.stdout || loginResult.stderr).trim() ||
+    (loggedIn ? `Logged in${authSnapshot.authMode ? ` (${authSnapshot.authMode})` : ''}` : 'Not logged in');
 
   const mcpResult = await runCodexCommand({
     cwd,
