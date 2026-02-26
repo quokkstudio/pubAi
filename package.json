@@ -1,0 +1,35 @@
+{
+  "name": "pubai-devmanager",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"npm run dev:renderer\" \"npm run dev:electron\"",
+    "dev:renderer": "vite",
+    "dev:electron": "wait-on tcp:5173 && cross-env TS_NODE_PROJECT=tsconfig.electron.json ELECTRON_RENDERER_URL=http://localhost:5173 electron -r ts-node/register/transpile-only ./electron/main.ts",
+    "build": "npm run build:renderer && npm run build:electron",
+    "build:renderer": "vite build",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "typecheck": "npm run typecheck:renderer && npm run typecheck:electron",
+    "typecheck:renderer": "tsc -p tsconfig.renderer.json --noEmit",
+    "typecheck:electron": "tsc -p tsconfig.electron.json --noEmit",
+    "start": "electron ./dist/electron/main.js"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.12.0",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.4.1",
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "electron": "^34.2.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7",
+    "wait-on": "^8.0.1"
+  }
+}
