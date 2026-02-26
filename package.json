@@ -6,14 +6,14 @@
   "scripts": {
     "dev": "concurrently -k \"npm run dev:renderer\" \"npm run dev:electron\"",
     "dev:renderer": "vite",
-    "dev:electron": "wait-on tcp:5173 && cross-env TS_NODE_PROJECT=tsconfig.electron.json ELECTRON_RENDERER_URL=http://localhost:5173 electron -r ts-node/register/transpile-only ./electron/main.ts",
+    "dev:electron": "npm run build:electron && wait-on tcp:5173 && cross-env ELECTRON_RENDERER_URL=http://localhost:5173 node ./scripts/launch-electron.cjs ./dist/electron/main.js",
     "build": "npm run build:renderer && npm run build:electron",
     "build:renderer": "vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
     "typecheck": "npm run typecheck:renderer && npm run typecheck:electron",
     "typecheck:renderer": "tsc -p tsconfig.renderer.json --noEmit",
     "typecheck:electron": "tsc -p tsconfig.electron.json --noEmit",
-    "start": "electron ./dist/electron/main.js"
+    "start": "node ./scripts/launch-electron.cjs ./dist/electron/main.js"
   },
   "dependencies": {
     "react": "^18.3.1",
