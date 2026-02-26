@@ -2,9 +2,23 @@ import { useEffect, useMemo, useState } from 'react';
 import Dashboard from './pages/Dashboard';
 import ProjectCreate from './pages/ProjectCreate';
 import ProjectDetail from './pages/ProjectDetail';
+import WorkspaceWindow from './pages/WorkspaceWindow';
 import type { ProjectAction, ProjectCreateInput, ProjectDetail as ProjectDetailType, ProjectSummary } from './types';
 
 type ViewMode = 'dashboard' | 'create' | 'detail';
+
+function getWorkspaceProjectKeyFromHash(hash: string): string {
+  if (!hash.startsWith('#/workspace')) {
+    return '';
+  }
+  const queryStart = hash.indexOf('?');
+  if (queryStart < 0) {
+    return '';
+  }
+  const query = hash.slice(queryStart + 1);
+  const params = new URLSearchParams(query);
+  return params.get('projectKey') ?? '';
+}
 
 function toKoreanTimeLabel(isoString: string): string {
   if (!isoString) {
@@ -23,8 +37,9 @@ function toKoreanTimeLabel(isoString: string): string {
   }).format(date);
 }
 
-export default function App() {
+function MainApp() {
   const [view, setView] = useState<ViewMode>('dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [version, setVersion] = useState('loading...');
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [selectedProjectKey, setSelectedProjectKey] = useState<string>('');
@@ -134,18 +149,13 @@ export default function App() {
         pushLog(`${projectKey}: ${deployResult.message}`);
         const refreshed = await api.getProjectDetail(projectKey);
         setSelectedProject(refreshed);
+      } else if (action === 'run') {
+        updatedSummary = await api.recordProjectAction({ projectKey, action });
+        await api.openWorkspaceWindow({ projectKey });
+        pushLog(`${updatedSummary.name}: 워크스페이스 실행`);
       } else {
         updatedSummary = await api.recordProjectAction({ projectKey, action });
         pushLog(`${updatedSummary.name}: ${actionLabel}`);
-      }
-
-      if (action === 'run') {
-        if (updatedSummary) {
-          const result = await api.openInVSCode(updatedSummary.localPath);
-          if (result) {
-            pushLog(result);
-          }
-        }
       }
 
       await refreshProjects();
@@ -186,8 +196,8 @@ export default function App() {
   }, []);
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
+    <div className={`app-shell ${sidebarOpen ? '' : 'sidebar-collapsed'}`}>
+      <aside className={`sidebar ${sidebarOpen ? '' : 'is-collapsed'}`}>
         <h1>DevManager</h1>
         <button onClick={() => setView('dashboard')}>프로젝트 목록</button>
         <button onClick={() => setView('create')}>새 프로젝트</button>
@@ -198,7 +208,12 @@ export default function App() {
 
       <main className="main-panel">
         <header className="topbar">
-          <strong>PubAI Desktop Manager</strong>
+          <div className="topbar-left">
+            <button className="outline-btn" onClick={() => setSidebarOpen((prev) => !prev)}>
+              {sidebarOpen ? '패널 닫기' : '패널 열기'}
+            </button>
+            <strong>PubAI Desktop Manager</strong>
+          </div>
           <span>Electron v{version}</span>
         </header>
 
@@ -248,4 +263,12 @@ export default function App() {
       </main>
     </div>
   );
+}
+
+export default function App() {
+  const workspaceProjectKey = getWorkspaceProjectKeyFromHash(window.location.hash);
+  if (workspaceProjectKey) {
+    return <WorkspaceWindow projectKey={workspaceProjectKey} />;
+  }
+  return <MainApp />;
 }

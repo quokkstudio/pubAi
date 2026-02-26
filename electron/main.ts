@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import { existsSync, promises as fs } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
+import { runCodex } from '../core/codexEngine';
 import {
   createProject,
   getProjectDetail,
@@ -15,6 +16,7 @@ import {
 } from '../core/projectManager';
 
 const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
+const workspaceWindows = new Map<string, BrowserWindow>();
 
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
@@ -144,6 +146,102 @@ function createWindow() {
   }
 }
 
+function buildWorkspaceHash(projectKey: string): string {
+  return `/workspace?projectKey=${encodeURIComponent(projectKey)}`;
+}
+
+function createWorkspaceWindow(projectKey: string): BrowserWindow {
+  const existing = workspaceWindows.get(projectKey);
+  if (existing && !existing.isDestroyed()) {
+    existing.show();
+    existing.focus();
+    return existing;
+  }
+
+  const win = new BrowserWindow({
+    width: 1680,
+    height: 980,
+    minWidth: 1180,
+    minHeight: 760,
+    show: false,
+    backgroundColor: '#0c1118',
+    title: `Workspace - ${projectKey}`,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+
+  win.once('ready-to-show', () => {
+    win.show();
+    win.focus();
+  });
+
+  if (isDev && process.env.ELECTRON_RENDERER_URL) {
+    const target = `${process.env.ELECTRON_RENDERER_URL}#${buildWorkspaceHash(projectKey)}`;
+    void win.loadURL(target);
+  } else {
+    void win.loadFile(path.join(__dirname, '../renderer/index.html'), {
+      hash: buildWorkspaceHash(projectKey)
+    });
+  }
+
+  win.on('closed', () => {
+    workspaceWindows.delete(projectKey);
+  });
+
+  workspaceWindows.set(projectKey, win);
+  return win;
+}
+
+function toPosixRelativePath(basePath: string, targetPath: string): string {
+  return path.relative(basePath, targetPath).replace(/\\/g, '/');
+}
+
+function assertWithinBase(basePath: string, targetPath: string): void {
+  const resolvedBase = path.resolve(basePath);
+  const resolvedTarget = path.resolve(targetPath);
+  const relative = path.relative(resolvedBase, resolvedTarget);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('허용되지 않은 경로 접근입니다.');
+  }
+}
+
+function resolveLocalTarget(localPath: string, relativePath = ''): string {
+  const normalized = relativePath.replace(/\\/g, '/').replace(/^\/+/, '');
+  const absolute = path.resolve(localPath, normalized);
+  assertWithinBase(localPath, absolute);
+  return absolute;
+}
+
+async function listWorkspaceEntries(localPath: string, relativePath = ''): Promise<
+  Array<{ name: string; relativePath: string; isDirectory: boolean }>
+> {
+  const targetPath = resolveLocalTarget(localPath, relativePath);
+  const entries = await fs.readdir(targetPath, { withFileTypes: true });
+
+  return entries
+    .filter((entry) => !entry.name.startsWith('.'))
+    .sort((a, b) => {
+      if (a.isDirectory() && !b.isDirectory()) {
+        return -1;
+      }
+      if (!a.isDirectory() && b.isDirectory()) {
+        return 1;
+      }
+      return a.name.localeCompare(b.name);
+    })
+    .map((entry) => {
+      const fullPath = path.join(targetPath, entry.name);
+      return {
+        name: entry.name,
+        relativePath: toPosixRelativePath(localPath, fullPath),
+        isDirectory: entry.isDirectory()
+      };
+    });
+}
+
 app.whenReady().then(() => {
   const projectsRoot = getProjectsRoot();
 
@@ -194,6 +292,64 @@ app.whenReady().then(() => {
   ipcMain.handle('projects:deploy', async (_, payload: { projectKey: string }) => {
     return runDeploy(projectsRoot, payload.projectKey);
   });
+
+  ipcMain.handle('workspace:openWindow', async (_, payload: { projectKey: string }) => {
+    createWorkspaceWindow(payload.projectKey);
+    return true;
+  });
+
+  ipcMain.handle('workspace:listEntries', async (_, payload: { projectKey: string; relativePath?: string }) => {
+    const detail = await getProjectDetail(projectsRoot, payload.projectKey);
+    return listWorkspaceEntries(detail.summary.localPath, payload.relativePath ?? '');
+  });
+
+  ipcMain.handle('workspace:readFile', async (_, payload: { projectKey: string; relativePath: string }) => {
+    const detail = await getProjectDetail(projectsRoot, payload.projectKey);
+    const fullPath = resolveLocalTarget(detail.summary.localPath, payload.relativePath);
+    const content = await fs.readFile(fullPath, 'utf-8');
+    return {
+      relativePath: toPosixRelativePath(detail.summary.localPath, fullPath),
+      content
+    };
+  });
+
+  ipcMain.handle(
+    'workspace:writeFile',
+    async (_, payload: { projectKey: string; relativePath: string; content: string }) => {
+      const detail = await getProjectDetail(projectsRoot, payload.projectKey);
+      const fullPath = resolveLocalTarget(detail.summary.localPath, payload.relativePath);
+      await fs.writeFile(fullPath, payload.content, 'utf-8');
+      return {
+        relativePath: toPosixRelativePath(detail.summary.localPath, fullPath),
+        savedAt: new Date().toISOString()
+      };
+    }
+  );
+
+  ipcMain.handle(
+    'codex:run',
+    async (
+      _,
+      payload: {
+        projectKey: string;
+        prompt: string;
+        model?: string;
+        reasoningLevel?: 'low' | 'medium' | 'high';
+        sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
+        attachments?: string[];
+      }
+    ) => {
+      const detail = await getProjectDetail(projectsRoot, payload.projectKey);
+      return runCodex({
+        cwd: detail.summary.localPath,
+        prompt: payload.prompt,
+        model: payload.model,
+        reasoningLevel: payload.reasoningLevel,
+        sandboxMode: payload.sandboxMode,
+        attachments: payload.attachments
+      });
+    }
+  );
 
   createWindow();
 

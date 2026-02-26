@@ -37,7 +37,7 @@ export default function Dashboard({ projects, busy, onRefresh, onSelect, onActio
               {projects.map((project) => (
                 <tr key={project.projectKey}>
                   <td>
-                    <button className="link-btn" onClick={() => onSelect(project.projectKey)}>
+                    <button className="link-btn" onClick={() => onAction(project.projectKey, 'run')}>
                       {project.name}
                     </button>
                   </td>
@@ -48,6 +48,9 @@ export default function Dashboard({ projects, busy, onRefresh, onSelect, onActio
                     <div className="action-row">
                       <button onClick={() => onAction(project.projectKey, 'run')} disabled={busy}>
                         실행
+                      </button>
+                      <button onClick={() => onSelect(project.projectKey)} disabled={busy}>
+                        상세
                       </button>
                       <button onClick={() => onAction(project.projectKey, 'deploy')} disabled={busy}>
                         배포

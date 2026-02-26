@@ -1,11 +1,15 @@
 /// <reference types="vite/client" />
 import type {
+  CodexRunResult,
   InitialSyncResult,
   ProjectAction,
   ProjectCreateInput,
   ProjectDeployResult,
   ProjectDetail,
-  ProjectSummary
+  ProjectSummary,
+  WorkspaceEntry,
+  WorkspaceFileReadResult,
+  WorkspaceFileWriteResult
 } from './types';
 
 interface DevManagerApi {
@@ -20,6 +24,18 @@ interface DevManagerApi {
   recordProjectAction: (payload: { projectKey: string; action: ProjectAction }) => Promise<ProjectSummary>;
   runInitialSync: (payload: { projectKey: string }) => Promise<InitialSyncResult>;
   runDeploy: (payload: { projectKey: string }) => Promise<ProjectDeployResult>;
+  openWorkspaceWindow: (payload: { projectKey: string }) => Promise<boolean>;
+  workspaceListEntries: (payload: { projectKey: string; relativePath?: string }) => Promise<WorkspaceEntry[]>;
+  workspaceReadFile: (payload: { projectKey: string; relativePath: string }) => Promise<WorkspaceFileReadResult>;
+  workspaceWriteFile: (payload: { projectKey: string; relativePath: string; content: string }) => Promise<WorkspaceFileWriteResult>;
+  runCodex: (payload: {
+    projectKey: string;
+    prompt: string;
+    model?: string;
+    reasoningLevel?: 'low' | 'medium' | 'high';
+    sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
+    attachments?: string[];
+  }) => Promise<CodexRunResult>;
 }
 
 declare global {

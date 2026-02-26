@@ -14,5 +14,21 @@ contextBridge.exposeInMainWorld('devManager', {
   recordProjectAction: (payload: { projectKey: string; action: ProjectAction }): Promise<unknown> =>
     ipcRenderer.invoke('projects:recordAction', payload),
   runInitialSync: (payload: { projectKey: string }): Promise<unknown> => ipcRenderer.invoke('projects:initialSync', payload),
-  runDeploy: (payload: { projectKey: string }): Promise<unknown> => ipcRenderer.invoke('projects:deploy', payload)
+  runDeploy: (payload: { projectKey: string }): Promise<unknown> => ipcRenderer.invoke('projects:deploy', payload),
+  openWorkspaceWindow: (payload: { projectKey: string }): Promise<unknown> =>
+    ipcRenderer.invoke('workspace:openWindow', payload),
+  workspaceListEntries: (payload: { projectKey: string; relativePath?: string }): Promise<unknown> =>
+    ipcRenderer.invoke('workspace:listEntries', payload),
+  workspaceReadFile: (payload: { projectKey: string; relativePath: string }): Promise<unknown> =>
+    ipcRenderer.invoke('workspace:readFile', payload),
+  workspaceWriteFile: (payload: { projectKey: string; relativePath: string; content: string }): Promise<unknown> =>
+    ipcRenderer.invoke('workspace:writeFile', payload),
+  runCodex: (payload: {
+    projectKey: string;
+    prompt: string;
+    model?: string;
+    reasoningLevel?: 'low' | 'medium' | 'high';
+    sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
+    attachments?: string[];
+  }): Promise<unknown> => ipcRenderer.invoke('codex:run', payload)
 });

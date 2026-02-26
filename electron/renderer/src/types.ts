@@ -82,3 +82,35 @@ export interface ProjectDeployResult {
   archivePath?: string;
   uploadedFileName?: string;
 }
+
+export interface WorkspaceEntry {
+  name: string;
+  relativePath: string;
+  isDirectory: boolean;
+}
+
+export interface WorkspaceFileReadResult {
+  relativePath: string;
+  content: string;
+}
+
+export interface WorkspaceFileWriteResult {
+  relativePath: string;
+  savedAt: string;
+}
+
+export type CodexSandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access';
+
+export interface CodexRunResult {
+  ok: boolean;
+  message: string;
+  startedAt: string;
+  finishedAt: string;
+  output: string;
+  stderr: string;
+  exitCode: number;
+  usage: {
+    inputChars: number;
+    outputChars: number;
+  };
+}

@@ -77,7 +77,7 @@ export default function ProjectDetail({
 
         <div className="action-row">
           <button onClick={() => onAction('run')} disabled={busy}>
-            VSCode/폴더 열기
+            실행
           </button>
           <button onClick={() => onAction('sync')} disabled={busy}>
             최초 동기화
