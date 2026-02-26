@@ -65,6 +65,11 @@ interface CodexCommandOptions {
   cwd: string;
 }
 
+interface ResolvedCodexCommandResult {
+  command: string;
+  result: CodexCommandResult;
+}
+
 interface McpPresetSpec {
   name: string;
   command: string;
@@ -231,39 +236,156 @@ async function resolveCodexBinary(cwd: string): Promise<{ codexHome: string; con
   return { codexHome, configPath, command };
 }
 
-async function checkCodexBinary(cwd: string): Promise<{ command: string; detected: boolean; message: string }> {
-  const { command } = await resolveCodexBinary(cwd);
-  const result = await new Promise<CodexCommandResult>((resolve, reject) => {
-    const child = spawn(command, ['--version'], {
+async function runSingleCodexCommand(
+  command: string,
+  args: string[],
+  cwd: string,
+  codexHome: string,
+  usePipeStdin: boolean
+): Promise<CodexCommandResult> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
       cwd,
       windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env }
+      stdio: [usePipeStdin ? 'pipe' : 'ignore', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        CODEX_HOME: codexHome
+      }
     });
 
     let stdout = '';
     let stderr = '';
 
-    child.stdout.on('data', (chunk: Buffer | string) => {
+    child.stdout?.on('data', (chunk: Buffer | string) => {
       stdout += chunk.toString();
     });
-    child.stderr.on('data', (chunk: Buffer | string) => {
+    child.stderr?.on('data', (chunk: Buffer | string) => {
       stderr += chunk.toString();
     });
-    child.once('error', (error) => {
+    child.once('error', (error) => reject(error));
+    child.once('close', (code) => resolve({ stdout, stderr, exitCode: code ?? 1 }));
+
+    if (usePipeStdin) {
+      child.stdin?.end();
+    }
+  });
+}
+
+function addCandidate(candidates: Set<string>, value: string | undefined): void {
+  const trimmed = value?.trim();
+  if (trimmed) {
+    candidates.add(trimmed);
+  }
+}
+
+async function getWindowsVscodeCodexCandidates(): Promise<string[]> {
+  const roots = [path.join(os.homedir(), '.vscode', 'extensions'), path.join(os.homedir(), '.vscode-insiders', 'extensions')];
+  const matches: string[] = [];
+
+  for (const root of roots) {
+    const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
+    const versions = entries
+      .filter((entry) => entry.isDirectory() && /^openai\.chatgpt-.*-win32/i.test(entry.name))
+      .map((entry) => entry.name)
+      .sort((a, b) => b.localeCompare(a, 'en', { numeric: true, sensitivity: 'base' }));
+
+    for (const versionDir of versions) {
+      const archCandidates = ['windows-x86_64', 'windows-arm64'];
+      for (const arch of archCandidates) {
+        const candidate = path.join(root, versionDir, 'bin', arch, 'codex.exe');
+        if (await pathExists(candidate)) {
+          matches.push(candidate);
+        }
+      }
+    }
+  }
+
+  return matches;
+}
+
+async function getCodexCommandCandidates(preferredCommand: string): Promise<string[]> {
+  const candidates = new Set<string>();
+
+  addCandidate(candidates, preferredCommand);
+  addCandidate(candidates, 'codex');
+
+  if (process.platform === 'win32') {
+    addCandidate(candidates, process.env.CODEX_BINARY_PATH);
+    addCandidate(candidates, path.join(process.env.APPDATA ?? '', 'npm', 'codex.cmd'));
+    addCandidate(candidates, path.join(process.env.APPDATA ?? '', 'npm', 'codex'));
+    addCandidate(candidates, path.join(process.env.LOCALAPPDATA ?? '', 'Programs', 'nodejs', 'codex.cmd'));
+
+    const vscodeCandidates = await getWindowsVscodeCodexCandidates();
+    for (const candidate of vscodeCandidates) {
+      addCandidate(candidates, candidate);
+    }
+  } else {
+    addCandidate(candidates, path.join(os.homedir(), '.local', 'bin', 'codex'));
+    addCandidate(candidates, '/usr/local/bin/codex');
+    addCandidate(candidates, '/opt/homebrew/bin/codex');
+  }
+
+  return [...candidates];
+}
+
+async function persistResolvedCodexCommand(codexHome: string, command: string): Promise<void> {
+  const settings = await readLocalSettings(codexHome);
+  const current = settings.codexBinaryPath?.trim();
+  if (current === command) {
+    return;
+  }
+  settings.codexBinaryPath = command;
+  await writeLocalSettings(codexHome, settings);
+}
+
+async function runCodexCommandResolved(
+  options: CodexCommandOptions,
+  usePipeStdin: boolean
+): Promise<ResolvedCodexCommandResult> {
+  const { codexHome, command: preferredCommand } = await resolveCodexBinary(options.cwd);
+  const candidates = await getCodexCommandCandidates(preferredCommand);
+  let lastError: Error | null = null;
+
+  for (const command of candidates) {
+    try {
+      const result = await runSingleCodexCommand(command, options.args, options.cwd, codexHome, usePipeStdin);
+      await persistResolvedCodexCommand(codexHome, command);
+      return { command, result };
+    } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (/ENOENT/i.test(message)) {
-        reject(new Error(`codex 실행파일을 찾을 수 없습니다. 설정에서 경로를 지정하세요. (${command})`));
-        return;
+        continue;
       }
-      reject(error);
-    });
-    child.once('close', (code) => resolve({ stdout, stderr, exitCode: code ?? 1 }));
-  }).catch((error) => {
+      lastError = error instanceof Error ? error : new Error(message);
+      break;
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+
+  throw new Error(`codex 실행파일을 찾을 수 없습니다. 설정에서 경로를 지정하세요. (${preferredCommand})`);
+}
+
+async function checkCodexBinary(cwd: string): Promise<{ command: string; detected: boolean; message: string }> {
+  const fallback = await resolveCodexBinary(cwd);
+  const resolved = await runCodexCommandResolved(
+    {
+      cwd,
+      args: ['--version']
+    },
+    false
+  ).catch((error) => {
     const message = error instanceof Error ? error.message : String(error);
-    return { stdout: '', stderr: message, exitCode: 1 };
+    return {
+      command: fallback.command,
+      result: { stdout: '', stderr: message, exitCode: 1 }
+    };
   });
 
+  const { command, result } = resolved;
   const detected = result.exitCode === 0;
   const message = detected
     ? (result.stdout || result.stderr).trim()
@@ -289,42 +411,8 @@ function buildPrompt(prompt: string, attachments: string[]): string {
 }
 
 async function runCodexCommand(options: CodexCommandOptions): Promise<CodexCommandResult> {
-  const { codexHome, command } = await resolveCodexBinary(options.cwd);
-
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, options.args, {
-      cwd: options.cwd,
-      windowsHide: true,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        CODEX_HOME: codexHome
-      }
-    });
-
-    let stdout = '';
-    let stderr = '';
-
-    child.stdout.on('data', (chunk: Buffer | string) => {
-      stdout += chunk.toString();
-    });
-    child.stderr.on('data', (chunk: Buffer | string) => {
-      stderr += chunk.toString();
-    });
-
-    child.once('error', (error) => {
-      const message = error instanceof Error ? error.message : String(error);
-      if (/ENOENT/i.test(message)) {
-        reject(new Error(`codex 실행파일을 찾을 수 없습니다. 설정에서 경로를 지정하세요. (${command})`));
-        return;
-      }
-      reject(error);
-    });
-    child.once('close', (code) => {
-      resolve({ stdout, stderr, exitCode: code ?? 1 });
-    });
-    child.stdin.end();
-  });
+  const resolved = await runCodexCommandResolved(options, true);
+  return resolved.result;
 }
 
 function parseMcpList(rawJson: string): CodexMcpServer[] {
