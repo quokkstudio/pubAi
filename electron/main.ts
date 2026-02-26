@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import path from 'node:path';
-import { promises as fs } from 'node:fs';
-import { spawn } from 'node:child_process';
+import { existsSync, promises as fs } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
 import {
   createProject,
   getProjectDetail,
@@ -48,14 +48,44 @@ function toWindowsPathIfNeeded(inputPath: string): string {
 async function tryLaunchVSCodeCLI(resolvedPath: string): Promise<boolean> {
   try {
     if (process.platform === 'win32') {
-      const command = `start "" code -n "${resolvedPath.replace(/"/g, '\\"')}"`;
-      const child = spawn('cmd.exe', ['/d', '/s', '/c', command], {
-        detached: true,
-        stdio: 'ignore',
+      const whereCode = spawnSync('cmd.exe', ['/d', '/s', '/c', 'where code.cmd'], {
+        stdio: ['ignore', 'pipe', 'ignore'],
+        encoding: 'utf8',
         windowsHide: true
       });
-      child.unref();
-      return true;
+
+      const codeBin = whereCode.status === 0 ? whereCode.stdout.split(/\r?\n/).find((line) => line.trim()) : '';
+      if (codeBin) {
+        const child = spawn(codeBin.trim(), ['-n', resolvedPath], {
+          detached: true,
+          stdio: 'ignore',
+          windowsHide: true
+        });
+        child.unref();
+        return true;
+      }
+
+      const candidates = [
+        path.join(process.env.LOCALAPPDATA ?? '', 'Programs', 'Microsoft VS Code', 'Code.exe'),
+        path.join(process.env['ProgramFiles'] ?? '', 'Microsoft VS Code', 'Code.exe'),
+        path.join(process.env['ProgramFiles(x86)'] ?? '', 'Microsoft VS Code', 'Code.exe')
+      ].filter(Boolean);
+
+      for (const candidate of candidates) {
+        if (!existsSync(candidate)) {
+          continue;
+        }
+
+        const child = spawn(candidate, ['-n', resolvedPath], {
+          detached: true,
+          stdio: 'ignore',
+          windowsHide: true
+        });
+        child.unref();
+        return true;
+      }
+
+      return false;
     }
 
     const child = spawn('code', ['-n', resolvedPath], {
