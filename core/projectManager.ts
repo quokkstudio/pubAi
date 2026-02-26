@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { appendProjectLog } from './logger';
+import { downloadInitialSkin } from './ftpEngine';
 
 export type SolutionType = 'cafe24' | 'godomall' | 'makeshop';
 
@@ -17,8 +18,10 @@ export interface ProjectCreateInput {
   adminId: string;
   adminPassword: string;
   ftpHost: string;
+  ftpPort?: number;
   ftpUser: string;
   ftpPassword: string;
+  ftpRemotePath?: string;
   skinId?: string;
   dueDate: string;
 }
@@ -31,8 +34,10 @@ export interface StoredProjectConfig {
   adminId: string;
   adminPassword: ProjectSecret;
   ftpHost: string;
+  ftpPort?: number;
   ftpUser: string;
   ftpPassword: ProjectSecret;
+  ftpRemotePath?: string;
   skinId?: string;
   dueDate: string;
   createdAt: string;
@@ -60,6 +65,17 @@ export interface ProjectDetail {
 }
 
 export type ProjectAction = 'run' | 'deploy' | 'sync' | 'save-docs';
+
+export interface InitialSyncResult {
+  projectKey: string;
+  solutionType: SolutionType;
+  mode: 'ftp' | 'manual';
+  message: string;
+  remotePath?: string;
+  localPath: string;
+  fileCount?: number;
+  syncedAt: string;
+}
 
 const CONFIG_FILE = 'config.json';
 const PROJECT_INFO_FILE = 'project-info.md';
@@ -234,8 +250,10 @@ export async function createProject(projectsRoot: string, input: ProjectCreateIn
     adminId: input.adminId.trim(),
     adminPassword: { value: input.adminPassword, encrypted: false },
     ftpHost: input.ftpHost.trim(),
+    ftpPort: input.ftpPort ?? 21,
     ftpUser: input.ftpUser.trim(),
     ftpPassword: { value: input.ftpPassword, encrypted: false },
+    ftpRemotePath: input.ftpRemotePath?.trim() || '/',
     skinId: input.skinId?.trim() || undefined,
     dueDate: input.dueDate,
     createdAt: now,
@@ -250,6 +268,8 @@ export async function createProject(projectsRoot: string, input: ProjectCreateIn
     `- 솔루션 타입: ${config.solutionType}`,
     `- 관리자 URL: ${config.adminUrl}`,
     `- 완료 예정일: ${config.dueDate}`,
+    `- FTP 호스트: ${config.ftpHost}`,
+    `- FTP 경로: ${config.ftpRemotePath ?? '/'}`,
     '',
     '## 메모',
     '- '
@@ -359,4 +379,72 @@ export async function recordProjectAction(
   await appendProjectLog(paths.projectPath, `작업 실행: ${action}`);
 
   return toSummary(paths, config);
+}
+
+export async function runInitialSync(projectsRoot: string, projectKey: string): Promise<InitialSyncResult> {
+  const paths = buildPaths(projectsRoot, projectKey);
+  const config = await readJsonFile<StoredProjectConfig>(paths.configPath);
+  const now = new Date().toISOString();
+
+  if (config.solutionType === 'makeshop') {
+    config.updatedAt = now;
+    config.lastWorkedAt = now;
+    await writeJsonFile(paths.configPath, config);
+    const message = 'MakeShop은 STEP3에서 수동 local 복사 방식입니다.';
+    await appendProjectLog(paths.projectPath, `최초 동기화 안내: ${message}`);
+    return {
+      projectKey,
+      solutionType: config.solutionType,
+      mode: 'manual',
+      message,
+      localPath: paths.localPath,
+      syncedAt: now
+    };
+  }
+
+  if (!config.ftpHost || !config.ftpUser || !config.ftpPassword.value) {
+    throw new Error('FTP 접속 정보가 부족합니다. host/user/password를 확인하세요.');
+  }
+
+  const remotePath = config.ftpRemotePath?.trim() || '/';
+  await appendProjectLog(
+    paths.projectPath,
+    `최초 동기화 시작: FTP ${config.ftpHost}:${config.ftpPort ?? 21} ${remotePath} -> ${paths.localPath}`
+  );
+
+  try {
+    const result = await downloadInitialSkin({
+      credential: {
+        host: config.ftpHost,
+        port: config.ftpPort ?? 21,
+        user: config.ftpUser,
+        password: config.ftpPassword.value
+      },
+      localPath: paths.localPath,
+      remotePath
+    });
+
+    config.updatedAt = result.syncedAt;
+    config.lastWorkedAt = result.syncedAt;
+    await writeJsonFile(paths.configPath, config);
+    await appendProjectLog(
+      paths.projectPath,
+      `최초 동기화 완료: ${result.fileCount}개 파일 다운로드 (${result.remotePath})`
+    );
+
+    return {
+      projectKey,
+      solutionType: config.solutionType,
+      mode: 'ftp',
+      message: `FTP 최초 동기화 완료 (${result.fileCount} files)`,
+      remotePath: result.remotePath,
+      localPath: result.localPath,
+      fileCount: result.fileCount,
+      syncedAt: result.syncedAt
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'FTP 최초 동기화 실패';
+    await appendProjectLog(paths.projectPath, `최초 동기화 실패: ${message}`);
+    throw error;
+  }
 }

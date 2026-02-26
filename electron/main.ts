@@ -6,6 +6,7 @@ import {
   getProjectDetail,
   listProjects,
   recordProjectAction,
+  runInitialSync,
   saveProjectDocs,
   type ProjectAction,
   type ProjectCreateInput
@@ -89,6 +90,10 @@ app.whenReady().then(() => {
 
   ipcMain.handle('projects:recordAction', async (_, payload: { projectKey: string; action: ProjectAction }) => {
     return recordProjectAction(projectsRoot, payload.projectKey, payload.action);
+  });
+
+  ipcMain.handle('projects:initialSync', async (_, payload: { projectKey: string }) => {
+    return runInitialSync(projectsRoot, payload.projectKey);
   });
 
   createWindow();

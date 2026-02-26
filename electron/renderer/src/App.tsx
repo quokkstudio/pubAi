@@ -124,11 +124,20 @@ export default function App() {
     setErrorMessage('');
 
     try {
-      const updatedSummary = await api.recordProjectAction({ projectKey, action });
-      pushLog(`${updatedSummary.name}: ${actionLabel}`);
+      let updatedSummary: ProjectSummary | null = null;
+
+      if (action === 'sync') {
+        const syncResult = await api.runInitialSync({ projectKey });
+        pushLog(`${projectKey}: ${syncResult.message}`);
+      } else {
+        updatedSummary = await api.recordProjectAction({ projectKey, action });
+        pushLog(`${updatedSummary.name}: ${actionLabel}`);
+      }
 
       if (action === 'run') {
-        await api.openPath(updatedSummary.localPath);
+        if (updatedSummary) {
+          await api.openPath(updatedSummary.localPath);
+        }
       }
 
       await refreshProjects();

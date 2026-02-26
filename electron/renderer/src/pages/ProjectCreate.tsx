@@ -20,8 +20,10 @@ export default function ProjectCreate({ busy, isDesktop, onCreate }: ProjectCrea
   const [adminId, setAdminId] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [ftpHost, setFtpHost] = useState('');
+  const [ftpPort, setFtpPort] = useState('21');
   const [ftpUser, setFtpUser] = useState('');
   const [ftpPassword, setFtpPassword] = useState('');
+  const [ftpRemotePath, setFtpRemotePath] = useState('/');
   const [skinId, setSkinId] = useState('');
   const [dueDate, setDueDate] = useState(getDefaultDueDate());
   const [message, setMessage] = useState('');
@@ -34,8 +36,10 @@ export default function ProjectCreate({ busy, isDesktop, onCreate }: ProjectCrea
     setAdminId('');
     setAdminPassword('');
     setFtpHost('');
+    setFtpPort('21');
     setFtpUser('');
     setFtpPassword('');
+    setFtpRemotePath('/');
     setSkinId('');
     setDueDate(getDefaultDueDate());
   }
@@ -56,8 +60,10 @@ export default function ProjectCreate({ busy, isDesktop, onCreate }: ProjectCrea
       adminId,
       adminPassword,
       ftpHost,
+      ftpPort: Number.parseInt(ftpPort, 10) || 21,
       ftpUser,
       ftpPassword,
+      ftpRemotePath,
       skinId: isMakeShop ? skinId : undefined,
       dueDate
     })
@@ -109,6 +115,11 @@ export default function ProjectCreate({ busy, isDesktop, onCreate }: ProjectCrea
         </label>
 
         <label>
+          FTP Port
+          <input value={ftpPort} onChange={(event) => setFtpPort(event.target.value)} />
+        </label>
+
+        <label>
           FTP User
           <input required value={ftpUser} onChange={(event) => setFtpUser(event.target.value)} />
         </label>
@@ -116,6 +127,11 @@ export default function ProjectCreate({ busy, isDesktop, onCreate }: ProjectCrea
         <label>
           FTP Password
           <input required type="password" value={ftpPassword} onChange={(event) => setFtpPassword(event.target.value)} />
+        </label>
+
+        <label>
+          FTP 원격 경로
+          <input value={ftpRemotePath} onChange={(event) => setFtpRemotePath(event.target.value)} placeholder="/" />
         </label>
 
         <label>

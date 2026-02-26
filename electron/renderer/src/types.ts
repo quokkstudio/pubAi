@@ -15,8 +15,10 @@ export interface ProjectCreateInput {
   adminId: string;
   adminPassword: string;
   ftpHost: string;
+  ftpPort?: number;
   ftpUser: string;
   ftpPassword: string;
+  ftpRemotePath?: string;
   skinId?: string;
   dueDate: string;
 }
@@ -29,8 +31,10 @@ export interface StoredProjectConfig {
   adminId: string;
   adminPassword: ProjectSecret;
   ftpHost: string;
+  ftpPort?: number;
   ftpUser: string;
   ftpPassword: ProjectSecret;
+  ftpRemotePath?: string;
   skinId?: string;
   dueDate: string;
   createdAt: string;
@@ -55,4 +59,15 @@ export interface ProjectDetail {
   workflow: string;
   localFiles: string[];
   recentLogs: string[];
+}
+
+export interface InitialSyncResult {
+  projectKey: string;
+  solutionType: SolutionType;
+  mode: 'ftp' | 'manual';
+  message: string;
+  remotePath?: string;
+  localPath: string;
+  fileCount?: number;
+  syncedAt: string;
 }
