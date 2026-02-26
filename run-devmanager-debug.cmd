@@ -9,42 +9,41 @@ echo ================================================ > "%LOG_FILE%"
 echo [%date% %time%] DevManager debug start >> "%LOG_FILE%"
 echo ================================================ >> "%LOG_FILE%"
 
-where npm.cmd >nul 2>&1
-if errorlevel 1 (
-  if exist "C:\Program Files\nodejs\npm.cmd" (
-    set "NPM_CMD=C:\Program Files\nodejs\npm.cmd"
-  ) else (
-    echo [ERROR] npm.cmd not found. Install Node.js first.
-    echo [ERROR] npm.cmd not found. Install Node.js first. >> "%LOG_FILE%"
-    pause
-    exit /b 1
+set "NPM_CMD="
+if exist "C:\Program Files\nodejs\npm.cmd" set "NPM_CMD=C:\Program Files\nodejs\npm.cmd"
+if not defined NPM_CMD if exist "C:\Program Files (x86)\nodejs\npm.cmd" set "NPM_CMD=C:\Program Files (x86)\nodejs\npm.cmd"
+if not defined NPM_CMD (
+  for /f "delims=" %%I in ('where npm.cmd 2^>nul') do (
+    set "NPM_CMD=%%I"
+    goto :npm_found
   )
-) else (
-  set "NPM_CMD=npm.cmd"
+)
+
+:npm_found
+if not defined NPM_CMD (
+  echo [ERROR] npm.cmd not found. Install Node.js first.
+  echo [ERROR] npm.cmd not found. Install Node.js first. >> "%LOG_FILE%"
+  pause
+  exit /b 1
 )
 
 for /f "tokens=5" %%P in ('netstat -ano ^| findstr /R /C:":5173 .*LISTENING"') do (
-  echo [INFO] Releasing port 5173 (PID %%P)...
-  echo [INFO] Releasing port 5173 (PID %%P)... >> "%LOG_FILE%"
+  echo [INFO] Releasing port 5173 - PID %%P ...
+  echo [INFO] Releasing port 5173 - PID %%P ... >> "%LOG_FILE%"
   taskkill /F /PID %%P >> "%LOG_FILE%" 2>&1
 )
 
 taskkill /F /IM electron.exe >> "%LOG_FILE%" 2>&1
 
-echo [INFO] npm run dev
-call "%NPM_CMD%" run dev >> "%LOG_FILE%" 2>&1
-set "DEV_EXIT=%ERRORLEVEL%"
-echo [INFO] npm run dev exit code: %DEV_EXIT%
-echo [INFO] npm run dev exit code: %DEV_EXIT% >> "%LOG_FILE%"
+echo [INFO] npm run build
+echo [INFO] npm run build >> "%LOG_FILE%"
+call "%NPM_CMD%" run build >> "%LOG_FILE%" 2>&1
+if errorlevel 1 goto :fail
 
-if not "%DEV_EXIT%"=="0" (
-  echo [WARN] Fallback to build/start
-  echo [WARN] Fallback to build/start >> "%LOG_FILE%"
-  call "%NPM_CMD%" run build >> "%LOG_FILE%" 2>&1
-  if errorlevel 1 goto :fail
-  call "%NPM_CMD%" run start >> "%LOG_FILE%" 2>&1
-  if errorlevel 1 goto :fail
-)
+echo [INFO] npm run start
+echo [INFO] npm run start >> "%LOG_FILE%"
+call "%NPM_CMD%" run start >> "%LOG_FILE%" 2>&1
+if errorlevel 1 goto :fail
 
 echo [OK] finished. Log: %LOG_FILE%
 pause
