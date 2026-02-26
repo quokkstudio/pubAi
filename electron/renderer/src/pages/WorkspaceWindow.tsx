@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type {
+  CodexState,
   CodexRunResult,
   CodexSandboxMode,
   ProjectDetail,
@@ -51,12 +52,15 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
   ]);
   const [prompt, setPrompt] = useState('');
   const [chatTab, setChatTab] = useState<ChatTab>('codex');
+  const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [model, setModel] = useState('gpt-5-codex');
   const [reasoningLevel, setReasoningLevel] = useState<'low' | 'medium' | 'high'>('high');
   const [sandboxMode, setSandboxMode] = useState<CodexSandboxMode>('workspace-write');
   const [attachmentPaths, setAttachmentPaths] = useState<string[]>([]);
   const [lastUsage, setLastUsage] = useState<CodexRunResult['usage'] | null>(null);
+  const [codexState, setCodexState] = useState<CodexState | null>(null);
+  const [apiKeyInput, setApiKeyInput] = useState('');
 
   const activeFileContent = activeFilePath ? fileBuffers[activeFilePath] ?? '' : '';
   const isDirty = useMemo(() => Boolean(activeFilePath && dirtyFiles[activeFilePath]), [activeFilePath, dirtyFiles]);
@@ -64,6 +68,10 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
 
   function pushChat(role: ChatMessage['role'], content: string): void {
     setCodexMessages((prev) => [...prev, { role, content, timestamp: nowLabel() }].slice(-80));
+  }
+
+  function hasMcpServer(name: string): boolean {
+    return (codexState?.mcpServers ?? []).some((server) => server.name === name && server.enabled);
   }
 
   async function loadEntries(relativePath = ''): Promise<void> {
@@ -81,6 +89,14 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
     const detail = await api.getProjectDetail(projectKey);
     setProjectDetail(detail);
     await loadEntries('');
+  }
+
+  async function loadCodexState(): Promise<void> {
+    if (!api) {
+      return;
+    }
+    const state = await api.getCodexState({ projectKey });
+    setCodexState(state);
   }
 
   async function openFile(relativePath: string): Promise<void> {
@@ -154,6 +170,7 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
         attachments: attachmentPaths
       });
       setLastUsage(result.usage);
+      await loadCodexState();
       if (result.ok) {
         pushChat('assistant', result.output || '(빈 응답)');
       } else {
@@ -161,6 +178,64 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Codex 실행 실패';
+      setErrorMessage(message);
+      pushChat('system', message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleCodexLogin(): Promise<void> {
+    if (!api) {
+      return;
+    }
+    setBusy(true);
+    setErrorMessage('');
+    try {
+      const state = await api.loginCodexApiKey({ projectKey, apiKey: apiKeyInput });
+      setCodexState(state);
+      setApiKeyInput('');
+      pushChat('system', 'Codex 로그인 완료');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Codex 로그인 실패';
+      setErrorMessage(message);
+      pushChat('system', message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleCodexLogout(): Promise<void> {
+    if (!api) {
+      return;
+    }
+    setBusy(true);
+    setErrorMessage('');
+    try {
+      const state = await api.logoutCodex({ projectKey });
+      setCodexState(state);
+      pushChat('system', 'Codex 로그아웃 완료');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Codex 로그아웃 실패';
+      setErrorMessage(message);
+      pushChat('system', message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleMcpPreset(preset: 'playwright' | 'chrome-devtools', enabled: boolean): Promise<void> {
+    if (!api) {
+      return;
+    }
+    setBusy(true);
+    setErrorMessage('');
+    try {
+      const state = await api.setCodexMcpPreset({ projectKey, preset, enabled });
+      setCodexState(state);
+      pushChat('system', `MCP ${preset} ${enabled ? '활성화' : '비활성화'} 완료`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'MCP 설정 실패';
       setErrorMessage(message);
       pushChat('system', message);
     } finally {
@@ -220,6 +295,10 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
   useEffect(() => {
     void loadProject().catch((error) => {
       const message = error instanceof Error ? error.message : '워크스페이스 로드 실패';
+      setErrorMessage(message);
+    });
+    void loadCodexState().catch((error) => {
+      const message = error instanceof Error ? error.message : 'Codex 상태 확인 실패';
       setErrorMessage(message);
     });
   }, [projectKey]);
@@ -384,9 +463,85 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
               CODEX
             </button>
             <div className="codex-toolbar">
-              <button onClick={() => setSettingsOpen((prev) => !prev)}>⚙</button>
+              <button onClick={() => setSettingsMenuOpen((prev) => !prev)}>⚙</button>
             </div>
           </div>
+
+          {settingsMenuOpen && (
+            <div className="codex-settings-menu">
+              <div className="settings-account">
+                <strong>{codexState?.loggedIn ? '로그인됨' : '로그인 필요'}</strong>
+                <span>{codexState?.loginMessage ?? '상태 확인 중'}</span>
+              </div>
+
+              <button className="settings-menu-item" onClick={() => setSettingsOpen((prev) => !prev)}>
+                Codex 설정 {settingsOpen ? '닫기' : '열기'}
+              </button>
+              <button
+                className="settings-menu-item"
+                onClick={() => {
+                  void api.openPath(codexState?.configPath ?? '');
+                }}
+                disabled={!codexState?.configPath}
+              >
+                config.toml 열기
+              </button>
+              <button
+                className="settings-menu-item"
+                onClick={() => {
+                  void api.openPath(codexState?.codexHome ?? '');
+                }}
+                disabled={!codexState?.codexHome}
+              >
+                MCP 설정 열기
+              </button>
+
+              <div className="settings-divider" />
+
+              <div className="settings-mcp-row">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={hasMcpServer('playwright')}
+                    onChange={(event) => void toggleMcpPreset('playwright', event.target.checked)}
+                  />
+                  Playwright MCP
+                </label>
+              </div>
+              <div className="settings-mcp-row">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={hasMcpServer('chrome-devtools')}
+                    onChange={(event) => void toggleMcpPreset('chrome-devtools', event.target.checked)}
+                  />
+                  Chrome DevTools MCP
+                </label>
+              </div>
+
+              <div className="settings-divider" />
+
+              {!codexState?.loggedIn && (
+                <div className="settings-login-box">
+                  <input
+                    type="password"
+                    placeholder="OpenAI API Key"
+                    value={apiKeyInput}
+                    onChange={(event) => setApiKeyInput(event.target.value)}
+                  />
+                  <button onClick={() => void handleCodexLogin()} disabled={busy || !apiKeyInput.trim()}>
+                    코덱스 연결
+                  </button>
+                </div>
+              )}
+
+              {codexState?.loggedIn && (
+                <button className="settings-menu-item danger" onClick={() => void handleCodexLogout()} disabled={busy}>
+                  로그아웃
+                </button>
+              )}
+            </div>
+          )}
 
           {settingsOpen && (
             <div className="codex-settings codex-settings-inline">
@@ -464,13 +619,20 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
             <span>{model}</span>
             <span>{reasoningLevel}</span>
             <span>{sandboxMode}</span>
+            <span>{codexState?.loggedIn ? 'Logged in' : 'Logged out'}</span>
             <span>
               사용량 {lastUsage?.inputChars ?? 0}/{lastUsage?.outputChars ?? 0}
             </span>
           </div>
 
           {attachmentPaths.length > 0 && (
-            <div className="attachment-list">{attachmentPaths.map((pathItem) => `• ${pathItem}`).join('\n')}</div>
+            <div className="attachment-list">
+              {attachmentPaths.map((pathItem) => (
+                <button key={pathItem} className="attachment-open-btn" onClick={() => void api.openPath(pathItem)}>
+                  • {pathItem}
+                </button>
+              ))}
+            </div>
           )}
         </aside>
       )}

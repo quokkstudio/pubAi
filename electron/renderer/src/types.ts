@@ -114,3 +114,21 @@ export interface CodexRunResult {
     outputChars: number;
   };
 }
+
+export interface CodexMcpServer {
+  name: string;
+  enabled: boolean;
+  transport?: {
+    type?: string;
+    command?: string;
+    args?: string[];
+  };
+}
+
+export interface CodexState {
+  codexHome: string;
+  configPath: string;
+  loggedIn: boolean;
+  loginMessage: string;
+  mcpServers: CodexMcpServer[];
+}

@@ -562,12 +562,26 @@ body {
 
 .attachment-list {
   border-top: 1px solid #1f2b3e;
-  white-space: pre-wrap;
-  padding: 8px;
+  padding: 6px 8px;
   font-size: 11px;
-  color: #8ea5cc;
   max-height: 90px;
   overflow: auto;
+  display: grid;
+  gap: 4px;
+}
+
+.attachment-open-btn {
+  border: 0;
+  background: transparent;
+  color: #8ea5cc;
+  text-align: left;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.attachment-open-btn:hover {
+  color: #b6d0ff;
 }
 
 .ide-shell {
@@ -776,6 +790,95 @@ body {
   color: #b3b3b3;
   cursor: pointer;
   font-size: 14px;
+}
+
+.codex-settings-menu {
+  background: #171717;
+  border-bottom: 1px solid #2b2b2b;
+  padding: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.settings-account {
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #202020;
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.settings-account strong {
+  color: #f3f3f3;
+}
+
+.settings-account span {
+  color: #a8a8a8;
+  word-break: break-word;
+}
+
+.settings-menu-item {
+  border: 1px solid #333;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  border-radius: 7px;
+  padding: 7px 8px;
+  text-align: left;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.settings-menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.settings-menu-item.danger {
+  border-color: #5b2b2b;
+  color: #ff9d9d;
+}
+
+.settings-divider {
+  border-top: 1px solid #2c2c2c;
+  margin: 4px 0;
+}
+
+.settings-mcp-row {
+  font-size: 12px;
+  color: #ccc;
+  padding: 2px 0;
+}
+
+.settings-mcp-row label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-login-box {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+}
+
+.settings-login-box input {
+  height: 32px;
+  border: 1px solid #3a3a3a;
+  border-radius: 6px;
+  background: #111;
+  color: #fff;
+  padding: 0 8px;
+}
+
+.settings-login-box button {
+  border: 1px solid #2f5f8f;
+  background: #0f4672;
+  color: #fff;
+  border-radius: 6px;
+  padding: 0 10px;
+  font-size: 12px;
+  cursor: pointer;
 }
 
 .codex-settings-inline {

@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import type {
+  CodexState,
   CodexRunResult,
   InitialSyncResult,
   ProjectAction,
@@ -36,6 +37,14 @@ interface DevManagerApi {
     sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
     attachments?: string[];
   }) => Promise<CodexRunResult>;
+  getCodexState: (payload: { projectKey: string }) => Promise<CodexState>;
+  loginCodexApiKey: (payload: { projectKey: string; apiKey: string }) => Promise<CodexState>;
+  logoutCodex: (payload: { projectKey: string }) => Promise<CodexState>;
+  setCodexMcpPreset: (payload: {
+    projectKey: string;
+    preset: 'playwright' | 'chrome-devtools';
+    enabled: boolean;
+  }) => Promise<CodexState>;
 }
 
 declare global {

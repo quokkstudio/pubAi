@@ -2,7 +2,14 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import { existsSync, promises as fs } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
-import { runCodex } from '../core/codexEngine';
+import {
+  getCodexState,
+  loginCodexWithApiKey,
+  logoutCodex,
+  runCodex,
+  setMcpPresetEnabled,
+  type CodexMcpPreset
+} from '../core/codexEngine';
 import {
   createProject,
   getProjectDetail,
@@ -348,6 +355,29 @@ app.whenReady().then(() => {
         sandboxMode: payload.sandboxMode,
         attachments: payload.attachments
       });
+    }
+  );
+
+  ipcMain.handle('codex:getState', async (_, payload: { projectKey: string }) => {
+    const detail = await getProjectDetail(projectsRoot, payload.projectKey);
+    return getCodexState(detail.summary.localPath);
+  });
+
+  ipcMain.handle('codex:loginApiKey', async (_, payload: { projectKey: string; apiKey: string }) => {
+    const detail = await getProjectDetail(projectsRoot, payload.projectKey);
+    return loginCodexWithApiKey(detail.summary.localPath, payload.apiKey);
+  });
+
+  ipcMain.handle('codex:logout', async (_, payload: { projectKey: string }) => {
+    const detail = await getProjectDetail(projectsRoot, payload.projectKey);
+    return logoutCodex(detail.summary.localPath);
+  });
+
+  ipcMain.handle(
+    'codex:setMcpPreset',
+    async (_, payload: { projectKey: string; preset: CodexMcpPreset; enabled: boolean }) => {
+      const detail = await getProjectDetail(projectsRoot, payload.projectKey);
+      return setMcpPresetEnabled(detail.summary.localPath, payload.preset, payload.enabled);
     }
   );
 

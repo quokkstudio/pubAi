@@ -30,5 +30,11 @@ contextBridge.exposeInMainWorld('devManager', {
     reasoningLevel?: 'low' | 'medium' | 'high';
     sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
     attachments?: string[];
-  }): Promise<unknown> => ipcRenderer.invoke('codex:run', payload)
+  }): Promise<unknown> => ipcRenderer.invoke('codex:run', payload),
+  getCodexState: (payload: { projectKey: string }): Promise<unknown> => ipcRenderer.invoke('codex:getState', payload),
+  loginCodexApiKey: (payload: { projectKey: string; apiKey: string }): Promise<unknown> =>
+    ipcRenderer.invoke('codex:loginApiKey', payload),
+  logoutCodex: (payload: { projectKey: string }): Promise<unknown> => ipcRenderer.invoke('codex:logout', payload),
+  setCodexMcpPreset: (payload: { projectKey: string; preset: 'playwright' | 'chrome-devtools'; enabled: boolean }): Promise<unknown> =>
+    ipcRenderer.invoke('codex:setMcpPreset', payload)
 });
