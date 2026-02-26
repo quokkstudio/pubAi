@@ -34,25 +34,29 @@ async function openInVSCode(targetPath: string): Promise<string> {
   const uriPath = resolvedPath.replace(/\\/g, '/');
   const vscodeUri = encodeURI(`vscode://file/${uriPath}`);
 
-  try {
-    await shell.openExternal(vscodeUri);
-    return '';
-  } catch {
-    // Fallback to CLI mode below.
-  }
-
-  return new Promise((resolve) => {
+  const cliResult = await new Promise<string>((resolve) => {
     const bin = process.platform === 'win32' ? 'code.cmd' : 'code';
-    const child = spawn(bin, [resolvedPath], { detached: true, stdio: 'ignore' });
+    const child = spawn(bin, ['-n', resolvedPath], { detached: true, stdio: 'ignore' });
 
-    child.once('error', async () => {
-      const fallback = await shell.openPath(resolvedPath);
-      resolve(fallback || 'VSCode 실행 실패, 폴더 열기로 대체했습니다.');
+    child.once('error', () => {
+      resolve('cli_failed');
     });
 
     child.unref();
     resolve('');
   });
+
+  if (!cliResult) {
+    return '';
+  }
+
+  try {
+    await shell.openExternal(vscodeUri);
+    return '';
+  } catch {
+    const fallback = await shell.openPath(resolvedPath);
+    return fallback || 'VSCode 실행 실패, 폴더 열기로 대체했습니다.';
+  }
 }
 
 function createWindow() {
