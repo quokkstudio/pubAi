@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
+import { spawn } from 'node:child_process';
 import {
   createProject,
   getProjectDetail,
@@ -26,6 +27,32 @@ app.commandLine.appendSwitch('enable-logging');
 
 function getProjectsRoot(): string {
   return path.join(process.cwd(), 'projects');
+}
+
+async function openInVSCode(targetPath: string): Promise<string> {
+  const resolvedPath = path.resolve(targetPath);
+  const uriPath = resolvedPath.replace(/\\/g, '/');
+  const vscodeUri = encodeURI(`vscode://file/${uriPath}`);
+
+  try {
+    await shell.openExternal(vscodeUri);
+    return '';
+  } catch {
+    // Fallback to CLI mode below.
+  }
+
+  return new Promise((resolve) => {
+    const bin = process.platform === 'win32' ? 'code.cmd' : 'code';
+    const child = spawn(bin, [resolvedPath], { detached: true, stdio: 'ignore' });
+
+    child.once('error', async () => {
+      const fallback = await shell.openPath(resolvedPath);
+      resolve(fallback || 'VSCode 실행 실패, 폴더 열기로 대체했습니다.');
+    });
+
+    child.unref();
+    resolve('');
+  });
 }
 
 function createWindow() {
@@ -64,6 +91,10 @@ app.whenReady().then(() => {
 
   ipcMain.handle('shell:openPath', async (_, targetPath: string) => {
     return shell.openPath(targetPath);
+  });
+
+  ipcMain.handle('shell:openInVSCode', async (_, targetPath: string) => {
+    return openInVSCode(targetPath);
   });
 
   ipcMain.handle('projects:list', async () => {

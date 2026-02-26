@@ -5,6 +5,7 @@ interface DevManagerApi {
   getVersion: () => Promise<string>;
   readText: (filePath: string) => Promise<string>;
   openPath: (targetPath: string) => Promise<string>;
+  openInVSCode: (targetPath: string) => Promise<string>;
   listProjects: () => Promise<ProjectSummary[]>;
   createProject: (payload: ProjectCreateInput) => Promise<ProjectSummary>;
   getProjectDetail: (projectKey: string) => Promise<ProjectDetail>;

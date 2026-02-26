@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('devManager', {
   getVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion'),
   readText: (filePath: string): Promise<string> => ipcRenderer.invoke('fs:readText', filePath),
   openPath: (targetPath: string): Promise<string> => ipcRenderer.invoke('shell:openPath', targetPath),
+  openInVSCode: (targetPath: string): Promise<string> => ipcRenderer.invoke('shell:openInVSCode', targetPath),
   listProjects: (): Promise<unknown> => ipcRenderer.invoke('projects:list'),
   createProject: (payload: ProjectCreateInput): Promise<unknown> => ipcRenderer.invoke('projects:create', payload),
   getProjectDetail: (projectKey: string): Promise<unknown> => ipcRenderer.invoke('projects:getDetail', projectKey),

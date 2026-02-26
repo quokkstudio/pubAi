@@ -136,7 +136,10 @@ export default function App() {
 
       if (action === 'run') {
         if (updatedSummary) {
-          await api.openPath(updatedSummary.localPath);
+          const result = await api.openInVSCode(updatedSummary.localPath);
+          if (result) {
+            pushLog(result);
+          }
         }
       }
 
