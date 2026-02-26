@@ -17,6 +17,7 @@ interface ChatMessage {
 }
 
 type DragMode = 'left' | 'right' | null;
+type ChatTab = 'chat' | 'codex';
 
 function nowLabel(): string {
   return new Date().toLocaleTimeString('ko-KR', { hour12: false });
@@ -25,14 +26,18 @@ function nowLabel(): string {
 export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
   const api = window.devManager;
   const [projectDetail, setProjectDetail] = useState<ProjectDetail | null>(null);
-  const [leftWidth, setLeftWidth] = useState(280);
-  const [rightWidth, setRightWidth] = useState(420);
+  const [leftWidth, setLeftWidth] = useState(300);
+  const [rightWidth, setRightWidth] = useState(460);
+  const [showExplorer, setShowExplorer] = useState(true);
+  const [showCodex, setShowCodex] = useState(true);
   const [dragMode, setDragMode] = useState<DragMode>(null);
 
   const [entriesMap, setEntriesMap] = useState<Record<string, WorkspaceEntry[]>>({});
   const [expandedFolders, setExpandedFolders] = useState<string[]>(['']);
-  const [openedFilePath, setOpenedFilePath] = useState('');
-  const [openedFileContent, setOpenedFileContent] = useState('');
+  const [openTabs, setOpenTabs] = useState<string[]>([]);
+  const [activeFilePath, setActiveFilePath] = useState('');
+  const [fileBuffers, setFileBuffers] = useState<Record<string, string>>({});
+  const [dirtyFiles, setDirtyFiles] = useState<Record<string, boolean>>({});
   const [savedAt, setSavedAt] = useState('');
   const [busy, setBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -45,6 +50,7 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
     }
   ]);
   const [prompt, setPrompt] = useState('');
+  const [chatTab, setChatTab] = useState<ChatTab>('codex');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [model, setModel] = useState('gpt-5-codex');
   const [reasoningLevel, setReasoningLevel] = useState<'low' | 'medium' | 'high'>('high');
@@ -52,11 +58,12 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
   const [attachmentPaths, setAttachmentPaths] = useState<string[]>([]);
   const [lastUsage, setLastUsage] = useState<CodexRunResult['usage'] | null>(null);
 
-  const isDirty = useMemo(() => Boolean(openedFilePath), [openedFilePath]);
+  const activeFileContent = activeFilePath ? fileBuffers[activeFilePath] ?? '' : '';
+  const isDirty = useMemo(() => Boolean(activeFilePath && dirtyFiles[activeFilePath]), [activeFilePath, dirtyFiles]);
   const rootEntries = entriesMap[''] ?? [];
 
   function pushChat(role: ChatMessage['role'], content: string): void {
-    setCodexMessages((prev) => [{ role, content, timestamp: nowLabel() }, ...prev].slice(0, 60));
+    setCodexMessages((prev) => [...prev, { role, content, timestamp: nowLabel() }].slice(-80));
   }
 
   async function loadEntries(relativePath = ''): Promise<void> {
@@ -80,12 +87,21 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
     if (!api) {
       return;
     }
+    if (fileBuffers[relativePath] !== undefined) {
+      if (!openTabs.includes(relativePath)) {
+        setOpenTabs((prev) => [...prev, relativePath]);
+      }
+      setActiveFilePath(relativePath);
+      return;
+    }
+
     setBusy(true);
     setErrorMessage('');
     try {
       const result = await api.workspaceReadFile({ projectKey, relativePath });
-      setOpenedFilePath(result.relativePath);
-      setOpenedFileContent(result.content);
+      setFileBuffers((prev) => ({ ...prev, [result.relativePath]: result.content }));
+      setOpenTabs((prev) => (prev.includes(result.relativePath) ? prev : [...prev, result.relativePath]));
+      setActiveFilePath(result.relativePath);
     } catch (error) {
       const message = error instanceof Error ? error.message : '파일 열기 실패';
       setErrorMessage(message);
@@ -95,7 +111,7 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
   }
 
   async function saveFile(): Promise<void> {
-    if (!api || !openedFilePath) {
+    if (!api || !activeFilePath) {
       return;
     }
     setBusy(true);
@@ -103,10 +119,11 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
     try {
       const result = await api.workspaceWriteFile({
         projectKey,
-        relativePath: openedFilePath,
-        content: openedFileContent
+        relativePath: activeFilePath,
+        content: fileBuffers[activeFilePath] ?? ''
       });
       setSavedAt(result.savedAt);
+      setDirtyFiles((prev) => ({ ...prev, [result.relativePath]: false }));
       pushChat('system', `파일 저장 완료: ${result.relativePath}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : '파일 저장 실패';
@@ -164,16 +181,27 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
     }
   }
 
+  function closeTab(relativePath: string): void {
+    const nextTabs = openTabs.filter((path) => path !== relativePath);
+    setOpenTabs(nextTabs);
+    if (activeFilePath === relativePath) {
+      setActiveFilePath(nextTabs[nextTabs.length - 1] ?? '');
+    }
+  }
+
   function renderEntries(entries: WorkspaceEntry[], depth: number): JSX.Element[] {
     return entries.flatMap((entry) => {
       const row = (
-        <div key={entry.relativePath} className="tree-row" style={{ paddingLeft: `${depth * 14 + 10}px` }}>
+        <div key={entry.relativePath} className="tree-row" style={{ paddingLeft: `${depth * 14 + 8}px` }}>
           {entry.isDirectory ? (
             <button className="tree-btn" onClick={() => toggleFolder(entry.relativePath)}>
               {expandedFolders.includes(entry.relativePath) ? '▾' : '▸'} {entry.name}
             </button>
           ) : (
-            <button className="tree-file-btn" onClick={() => void openFile(entry.relativePath)}>
+            <button
+              className={`tree-file-btn ${activeFilePath === entry.relativePath ? 'active' : ''}`}
+              onClick={() => void openFile(entry.relativePath)}
+            >
               {entry.name}
             </button>
           )}
@@ -204,11 +232,13 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
     function onMove(event: MouseEvent): void {
       const viewportWidth = window.innerWidth;
       if (dragMode === 'left') {
-        const next = Math.min(Math.max(event.clientX, 180), viewportWidth - rightWidth - 360);
+        const reservedRight = showCodex ? rightWidth + 6 : 0;
+        const next = Math.min(Math.max(event.clientX - 50, 220), viewportWidth - reservedRight - 460);
         setLeftWidth(next);
       } else {
         const rightEdge = viewportWidth - event.clientX;
-        const next = Math.min(Math.max(rightEdge, 320), viewportWidth - leftWidth - 320);
+        const reservedLeft = showExplorer ? leftWidth + 58 + 6 : 58;
+        const next = Math.min(Math.max(rightEdge, 360), viewportWidth - reservedLeft - 420);
         setRightWidth(next);
       }
     }
@@ -223,13 +253,18 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-  }, [dragMode, leftWidth, rightWidth]);
+  }, [dragMode, leftWidth, rightWidth, showCodex, showExplorer]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
         event.preventDefault();
         void saveFile();
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'w' && activeFilePath) {
+        event.preventDefault();
+        closeTab(activeFilePath);
       }
     }
 
@@ -240,69 +275,121 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
   });
 
   return (
-    <div className="workspace-root">
-      <header className="workspace-topbar">
-        <div>
-          <strong>{projectDetail?.summary.name ?? projectKey}</strong>
-          <span className="workspace-meta"> {projectDetail?.summary.localPath ?? ''}</span>
-        </div>
-        <div className="workspace-actions">
-          <button className="outline-btn" onClick={() => void loadProject()} disabled={busy}>
-            새로고침
-          </button>
-          <button className="outline-btn" onClick={() => void saveFile()} disabled={busy || !isDirty}>
-            저장
-          </button>
-        </div>
-      </header>
+    <div className="ide-shell">
+      <aside className="ide-activitybar">
+        <button
+          className={`activity-btn ${showExplorer ? 'active' : ''}`}
+          onClick={() => setShowExplorer((prev) => !prev)}
+          title="Explorer"
+        >
+          📁
+        </button>
+        <button
+          className={`activity-btn ${showCodex ? 'active' : ''}`}
+          onClick={() => setShowCodex((prev) => !prev)}
+          title="Codex"
+        >
+          ✦
+        </button>
+      </aside>
 
-      {errorMessage && <div className="alert-error workspace-error">{errorMessage}</div>}
-
-      <div className="workspace-body">
-        <aside className="workspace-left" style={{ width: `${leftWidth}px` }}>
-          <div className="panel-title">Explorer</div>
+      {showExplorer && (
+        <aside className="ide-explorer" style={{ width: `${leftWidth}px` }}>
+          <div className="ide-panel-header">
+            <span>EXPLORER</span>
+            <button className="ghost-btn" onClick={() => void loadProject()}>
+              ↻
+            </button>
+          </div>
+          <div className="ide-project-label">{projectDetail?.summary.name ?? projectKey}</div>
           <div className="tree-scroll">{renderEntries(rootEntries, 0)}</div>
         </aside>
+      )}
 
+      {showExplorer && (
         <div
           className="workspace-splitter"
           role="separator"
           aria-label="left panel resize"
           onMouseDown={() => setDragMode('left')}
         />
+      )}
 
-        <section className="workspace-editor">
-          <div className="editor-header">
-            <strong>{openedFilePath || '파일을 선택하세요'}</strong>
-            <span>{savedAt ? `저장: ${savedAt}` : ''}</span>
-          </div>
-          <textarea
-            className="workspace-editor-input"
-            value={openedFileContent}
-            onChange={(event) => setOpenedFileContent(event.target.value)}
-            placeholder="좌측에서 파일을 선택하면 편집할 수 있습니다."
-            spellCheck={false}
-            disabled={!openedFilePath}
-          />
-        </section>
+      <section className="ide-main">
+        <div className="ide-tabbar">
+          {openTabs.length === 0 && <div className="tab-empty">열린 파일 없음</div>}
+          {openTabs.map((tabPath) => (
+            <button
+              key={tabPath}
+              className={`ide-tab ${activeFilePath === tabPath ? 'active' : ''}`}
+              onClick={() => setActiveFilePath(tabPath)}
+            >
+              <span>{tabPath.split('/').pop()}</span>
+              {dirtyFiles[tabPath] && <em>●</em>}
+              <i
+                onClick={(event) => {
+                  event.stopPropagation();
+                  closeTab(tabPath);
+                }}
+              >
+                ×
+              </i>
+            </button>
+          ))}
+        </div>
 
+        {errorMessage && <div className="alert-error workspace-error">{errorMessage}</div>}
+
+        <textarea
+          className="workspace-editor-input ide-editor-input"
+          value={activeFileContent}
+          onChange={(event) => {
+            if (!activeFilePath) {
+              return;
+            }
+            const value = event.target.value;
+            setFileBuffers((prev) => ({ ...prev, [activeFilePath]: value }));
+            setDirtyFiles((prev) => ({ ...prev, [activeFilePath]: true }));
+          }}
+          placeholder="좌측에서 파일을 선택하면 편집할 수 있습니다."
+          spellCheck={false}
+          disabled={!activeFilePath}
+        />
+
+        <div className="ide-statusbar">
+          <span>{activeFilePath || 'No file selected'}</span>
+          <span>{savedAt ? `저장: ${savedAt}` : ''}</span>
+          <button className="status-save-btn" onClick={() => void saveFile()} disabled={busy || !isDirty}>
+            저장
+          </button>
+        </div>
+      </section>
+
+      {showCodex && (
         <div
           className="workspace-splitter"
           role="separator"
           aria-label="right panel resize"
           onMouseDown={() => setDragMode('right')}
         />
+      )}
 
-        <aside className="workspace-right" style={{ width: `${rightWidth}px` }}>
-          <div className="panel-title codex-title-row">
-            <span>CODEX</span>
-            <button className="outline-btn" onClick={() => setSettingsOpen((prev) => !prev)}>
-              설정
+      {showCodex && (
+        <aside className="ide-codex" style={{ width: `${rightWidth}px` }}>
+          <div className="codex-top-tabs">
+            <button className={chatTab === 'chat' ? 'active' : ''} onClick={() => setChatTab('chat')}>
+              CHAT
             </button>
+            <button className={chatTab === 'codex' ? 'active' : ''} onClick={() => setChatTab('codex')}>
+              CODEX
+            </button>
+            <div className="codex-toolbar">
+              <button onClick={() => setSettingsOpen((prev) => !prev)}>⚙</button>
+            </div>
           </div>
 
           {settingsOpen && (
-            <div className="codex-settings">
+            <div className="codex-settings codex-settings-inline">
               <label>
                 모델
                 <select value={model} onChange={(event) => setModel(event.target.value)}>
@@ -333,13 +420,10 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
                   <option value="danger-full-access">danger-full-access</option>
                 </select>
               </label>
-              <div className="codex-usage">
-                사용량: in {lastUsage?.inputChars ?? 0} / out {lastUsage?.outputChars ?? 0}
-              </div>
             </div>
           )}
 
-          <div className="codex-chat-log">
+          <div className="codex-chat-log codex-chat-log-vscode">
             {codexMessages.map((message, index) => (
               <div key={`${message.timestamp}-${index}`} className={`chat-msg chat-${message.role}`}>
                 <div className="chat-meta">
@@ -350,9 +434,9 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
             ))}
           </div>
 
-          <div className="codex-input-row">
+          <div className="codex-input-row codex-input-vscode">
             <label className="attach-btn">
-              첨부
+              +
               <input
                 type="file"
                 multiple
@@ -368,18 +452,28 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
             <textarea
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
-              placeholder="프로젝트 코드 기준으로 요청을 입력하세요"
+              placeholder="Ask Codex..."
               spellCheck={false}
             />
             <button onClick={() => void runCodexPrompt()} disabled={busy || !prompt.trim()}>
-              전송
+              ↑
             </button>
           </div>
+
+          <div className="codex-footer-row">
+            <span>{model}</span>
+            <span>{reasoningLevel}</span>
+            <span>{sandboxMode}</span>
+            <span>
+              사용량 {lastUsage?.inputChars ?? 0}/{lastUsage?.outputChars ?? 0}
+            </span>
+          </div>
+
           {attachmentPaths.length > 0 && (
             <div className="attachment-list">{attachmentPaths.map((pathItem) => `• ${pathItem}`).join('\n')}</div>
           )}
         </aside>
-      </div>
+      )}
     </div>
   );
 }
