@@ -158,4 +158,44 @@ DevManager/
 지금부터 STEP 1부터 순서대로 구현을 시작하라.
 먼저 프로젝트 초기화 및 Electron 기본 구조를 생성하는 코드와 설치 명령어를 작성하라.
 작업 후, 제대로 되었는지 확인 해보고, 오류가 있거나 문제가있으면 답변 남기고, 바로 다시 수정진행을 반복하여 문제 없을 때 결과 를 알려준다.( 스텝단위로 )
+
+-------------------------------------------------
+[작업 진행 현황 - 2026-02-26]
+
+- STEP 1 완료
+  - Electron + React + TypeScript 기본 구조 구성
+  - dev/start 실행 경로 정리 및 실행 안정화
+
+- STEP 2 완료
+  - 프로젝트 생성/목록/상세 조회/문서 저장 CRUD 구현
+  - projects/{projectKey} 파일 기반 저장 구조 동작 확인
+
+- STEP 3 완료
+  - Cafe24/Godomall FTP 최초 동기화 구현 (basic-ftp)
+  - MakeShop 최초 동기화는 수동 local 복사 안내 방식 구현
+  - FTP 타임아웃/재시도/IPv4 passive 대응
+  - 550 Permission denied 항목 건너뛰기 처리
+
+- 실행/운영 보강 완료
+  - run-devmanager.cmd, run-devmanager-debug.cmd 추가
+  - 검은 화면 이슈 수정 (build asset 상대 경로)
+  - 실행 버튼: local 폴더 VSCode 열기 경로 보강
+
+-------------------------------------------------
+[다음 작업 계획]
+
+- STEP 4: MakeShop Playwright 업로드 엔진 구현
+  - 로그인 -> skin_id 업로드 -> 완료 감지
+
+- STEP 5: DeployRouter 고도화
+  - Cafe24/Godomall 변경 파일 감지 후 변경분 배포
+  - MakeShop 압축/업로드 플로우 연결
+
+- STEP 6: UI 완성
+  - 로그/상태 표시 개선
+  - 상세 화면 작업 버튼 및 피드백 고도화
+
+- STEP 7: 테스트 및 정리
+  - 시나리오 테스트
+  - 예외 처리/문서 정리
  
