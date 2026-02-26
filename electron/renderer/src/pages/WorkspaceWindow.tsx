@@ -193,9 +193,8 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
     setBusy(true);
     setErrorMessage('');
     try {
-      const state = await api.loginCodexChatGPT({ projectKey });
-      setCodexState(state);
-      pushChat('system', 'Codex ChatGPT 로그인 완료');
+      const result = await api.startCodexLoginChatGPT({ projectKey });
+      pushChat('system', result.message);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Codex ChatGPT 로그인 실패';
       setErrorMessage(message);
@@ -498,6 +497,9 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
               </button>
               <button className="settings-menu-item" onClick={() => setSettingsOpen((prev) => !prev)}>
                 Codex 설정 {settingsOpen ? '닫기' : '열기'}
+              </button>
+              <button className="settings-menu-item" onClick={() => void loadCodexState()}>
+                로그인 상태 새로고침
               </button>
               <button className="settings-menu-item" onClick={() => pushChat('system', 'IDE 설정 메뉴는 현재 기본값으로 동작합니다.')}>
                 IDE 설정

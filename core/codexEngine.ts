@@ -49,6 +49,11 @@ export interface CodexState {
   mcpServers: CodexMcpServer[];
 }
 
+export interface CodexLoginStartResult {
+  started: boolean;
+  message: string;
+}
+
 interface CodexCommandResult {
   stdout: string;
   stderr: string;
@@ -287,17 +292,45 @@ export async function setCodexBinaryPath(cwd: string, binaryPath: string): Promi
   return getCodexState(cwd);
 }
 
-export async function loginCodexWithChatGPT(cwd: string): Promise<CodexState> {
-  const result = await runCodexCommand({
-    cwd,
-    args: ['login', '--device-auth']
-  });
-
-  if (result.exitCode !== 0) {
-    throw new Error((result.stderr || result.stdout || 'Codex ChatGPT 로그인 실패').trim());
+export async function startCodexLoginWithChatGPT(cwd: string): Promise<CodexLoginStartResult> {
+  const binaryStatus = await checkCodexBinary(cwd);
+  if (!binaryStatus.detected) {
+    throw new Error(binaryStatus.message);
   }
 
-  return getCodexState(cwd);
+  const { codexHome, command } = await resolveCodexBinary(cwd);
+
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(command, ['login', '--device-auth'], {
+      cwd,
+      windowsHide: false,
+      detached: true,
+      stdio: 'ignore',
+      env: {
+        ...process.env,
+        CODEX_HOME: codexHome
+      }
+    });
+
+    child.once('error', (error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/ENOENT/i.test(message)) {
+        reject(new Error(`codex 실행파일을 찾을 수 없습니다. 설정에서 경로를 지정하세요. (${command})`));
+        return;
+      }
+      reject(error);
+    });
+
+    child.once('spawn', () => {
+      child.unref();
+      resolve();
+    });
+  });
+
+  return {
+    started: true,
+    message: 'ChatGPT 로그인 프로세스를 시작했습니다. 브라우저 인증 후 "로그인 상태 새로고침"을 눌러주세요.'
+  };
 }
 
 export async function logoutCodex(cwd: string): Promise<CodexState> {

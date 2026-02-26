@@ -38,7 +38,7 @@ interface DevManagerApi {
     attachments?: string[];
   }) => Promise<CodexRunResult>;
   getCodexState: (payload: { projectKey: string }) => Promise<CodexState>;
-  loginCodexChatGPT: (payload: { projectKey: string }) => Promise<CodexState>;
+  startCodexLoginChatGPT: (payload: { projectKey: string }) => Promise<{ started: boolean; message: string }>;
   logoutCodex: (payload: { projectKey: string }) => Promise<CodexState>;
   setCodexBinaryPath: (payload: { projectKey: string; binaryPath: string }) => Promise<CodexState>;
   setCodexMcpPreset: (payload: {
