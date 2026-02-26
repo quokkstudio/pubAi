@@ -700,6 +700,39 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
             </button>
           </div>
 
+          <div className="codex-quick-controls">
+            <label>
+              모델
+              <select value={model} onChange={(event) => setModel(event.target.value)}>
+                <option value="gpt-5-codex">gpt-5-codex</option>
+                <option value="gpt-5">gpt-5</option>
+                <option value="o3">o3</option>
+              </select>
+            </label>
+            <label>
+              이성
+              <select
+                value={reasoningLevel}
+                onChange={(event) => setReasoningLevel(event.target.value as 'low' | 'medium' | 'high')}
+              >
+                <option value="low">low</option>
+                <option value="medium">medium</option>
+                <option value="high">high</option>
+              </select>
+            </label>
+            <label>
+              권한/샌드박스
+              <select
+                value={sandboxMode}
+                onChange={(event) => setSandboxMode(event.target.value as CodexSandboxMode)}
+              >
+                <option value="read-only">read-only</option>
+                <option value="workspace-write">workspace-write</option>
+                <option value="danger-full-access">danger-full-access</option>
+              </select>
+            </label>
+          </div>
+
           <div className="codex-footer-row">
             <span>{model}</span>
             <span>{reasoningLevel}</span>

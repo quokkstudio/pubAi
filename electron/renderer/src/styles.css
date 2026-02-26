@@ -889,6 +889,32 @@ body {
   font-size: 14px;
 }
 
+.codex-quick-controls {
+  border-top: 1px solid #2b2b2b;
+  padding: 6px 8px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  background: #121212;
+}
+
+.codex-quick-controls label {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+  color: #a8a8a8;
+}
+
+.codex-quick-controls select {
+  height: 28px;
+  border: 1px solid #3a3a3a;
+  border-radius: 5px;
+  background: #1c1c1c;
+  color: #eee;
+  padding: 0 6px;
+  font-size: 12px;
+}
+
 .codex-footer-row {
   border-top: 1px solid #262626;
   padding: 6px 8px;
