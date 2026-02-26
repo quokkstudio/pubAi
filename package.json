@@ -5,7 +5,7 @@
   "main": "dist/electron/main.js",
   "scripts": {
     "dev": "concurrently -k \"npm run dev:renderer\" \"npm run dev:electron\"",
-    "dev:renderer": "vite",
+    "dev:renderer": "vite --port 5173 --strictPort",
     "dev:electron": "npm run build:electron && wait-on tcp:5173 && cross-env ELECTRON_RENDERER_URL=http://localhost:5173 node ./scripts/launch-electron.cjs ./dist/electron/main.js",
     "build": "npm run build:renderer && npm run build:electron",
     "build:renderer": "vite build",

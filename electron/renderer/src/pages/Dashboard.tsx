@@ -1,9 +1,68 @@
-export default function Dashboard() {
+import type { ProjectAction, ProjectSummary } from '../types';
+
+interface DashboardProps {
+  projects: ProjectSummary[];
+  busy: boolean;
+  onRefresh: () => void;
+  onSelect: (projectKey: string) => void;
+  onAction: (projectKey: string, action: ProjectAction) => void;
+  toDateLabel: (isoString: string) => string;
+}
+
+export default function Dashboard({ projects, busy, onRefresh, onSelect, onAction, toDateLabel }: DashboardProps) {
   return (
     <div>
-      <h2>프로젝트 리스트</h2>
-      <p>프로젝트명 / 타입 / 최근 작업 일시 / 완료 예정일 / 실행 / 배포 / 최초 동기화</p>
-      <p>STEP 2에서 파일 기반 프로젝트 CRUD를 연결합니다.</p>
+      <div className="section-header">
+        <h2>프로젝트 리스트</h2>
+        <button className="outline-btn" onClick={onRefresh} disabled={busy}>
+          새로고침
+        </button>
+      </div>
+
+      {projects.length === 0 ? (
+        <p>생성된 프로젝트가 없습니다. 새 프로젝트를 먼저 만들어주세요.</p>
+      ) : (
+        <div className="table-wrap">
+          <table className="project-table">
+            <thead>
+              <tr>
+                <th>프로젝트명</th>
+                <th>타입</th>
+                <th>최근 작업</th>
+                <th>완료 예정일</th>
+                <th>작업</th>
+              </tr>
+            </thead>
+            <tbody>
+              {projects.map((project) => (
+                <tr key={project.projectKey}>
+                  <td>
+                    <button className="link-btn" onClick={() => onSelect(project.projectKey)}>
+                      {project.name}
+                    </button>
+                  </td>
+                  <td>{project.solutionType}</td>
+                  <td>{toDateLabel(project.lastWorkedAt)}</td>
+                  <td>{project.dueDate || '-'}</td>
+                  <td>
+                    <div className="action-row">
+                      <button onClick={() => onAction(project.projectKey, 'run')} disabled={busy}>
+                        실행
+                      </button>
+                      <button onClick={() => onAction(project.projectKey, 'deploy')} disabled={busy}>
+                        배포
+                      </button>
+                      <button onClick={() => onAction(project.projectKey, 'sync')} disabled={busy}>
+                        최초 동기화
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

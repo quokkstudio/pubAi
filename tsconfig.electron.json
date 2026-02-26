@@ -4,8 +4,8 @@
     "lib": ["ES2022"],
     "module": "CommonJS",
     "types": ["node"],
-    "rootDir": "./electron",
-    "outDir": "./dist/electron"
+    "rootDir": ".",
+    "outDir": "./dist"
   },
-  "include": ["electron/main.ts", "electron/preload.ts"]
+  "include": ["electron/main.ts", "electron/preload.ts", "core/**/*.ts"]
 }
