@@ -29,24 +29,53 @@ function getProjectsRoot(): string {
   return path.join(process.cwd(), 'projects');
 }
 
+function toWindowsPathIfNeeded(inputPath: string): string {
+  if (process.platform !== 'win32') {
+    return inputPath;
+  }
+
+  const normalized = inputPath.replace(/\\/g, '/');
+  const mntMatch = normalized.match(/^\/mnt\/([a-zA-Z])\/(.*)$/);
+  if (!mntMatch) {
+    return path.win32.normalize(inputPath);
+  }
+
+  const drive = mntMatch[1].toUpperCase();
+  const rest = mntMatch[2].replace(/\//g, '\\');
+  return `${drive}:\\${rest}`;
+}
+
+async function tryLaunchVSCodeCLI(resolvedPath: string): Promise<boolean> {
+  try {
+    if (process.platform === 'win32') {
+      const command = `start "" code -n "${resolvedPath.replace(/"/g, '\\"')}"`;
+      const child = spawn('cmd.exe', ['/d', '/s', '/c', command], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true
+      });
+      child.unref();
+      return true;
+    }
+
+    const child = spawn('code', ['-n', resolvedPath], {
+      detached: true,
+      stdio: 'ignore'
+    });
+    child.unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function openInVSCode(targetPath: string): Promise<string> {
-  const resolvedPath = path.resolve(targetPath);
+  const resolvedPath = toWindowsPathIfNeeded(path.resolve(targetPath));
   const uriPath = resolvedPath.replace(/\\/g, '/');
   const vscodeUri = encodeURI(`vscode://file/${uriPath}`);
 
-  const cliResult = await new Promise<string>((resolve) => {
-    const bin = process.platform === 'win32' ? 'code.cmd' : 'code';
-    const child = spawn(bin, ['-n', resolvedPath], { detached: true, stdio: 'ignore' });
-
-    child.once('error', () => {
-      resolve('cli_failed');
-    });
-
-    child.unref();
-    resolve('');
-  });
-
-  if (!cliResult) {
+  const launched = await tryLaunchVSCodeCLI(resolvedPath);
+  if (launched) {
     return '';
   }
 
