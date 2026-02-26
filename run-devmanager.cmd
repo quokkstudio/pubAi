@@ -23,12 +23,25 @@ if not exist "node_modules" (
   if errorlevel 1 goto :fail
 )
 
+for /f "tokens=5" %%P in ('netstat -ano ^| findstr /R /C:":5173 .*LISTENING"') do (
+  echo [INFO] Releasing port 5173 (PID %%P)...
+  taskkill /F /PID %%P >nul 2>&1
+)
+
+taskkill /F /IM electron.exe >nul 2>&1
+
 echo [INFO] Starting DevManager...
 call "%NPM_CMD%" run dev
-if errorlevel 1 goto :fail
+if errorlevel 1 (
+  echo [WARN] npm run dev failed. Fallback to build/start mode...
+  call "%NPM_CMD%" run build
+  if errorlevel 1 goto :fail
+  call "%NPM_CMD%" run start
+  if errorlevel 1 goto :fail
+)
 exit /b 0
 
 :fail
-echo [ERROR] Failed to start DevManager.
+echo [ERROR] Failed to start DevManager. Scroll up and check the first error line.
 pause
 exit /b 1
