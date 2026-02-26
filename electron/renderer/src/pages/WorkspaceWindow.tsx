@@ -474,8 +474,17 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
                 <span>{codexState?.loginMessage ?? '상태 확인 중'}</span>
               </div>
 
+              <button className="settings-menu-item" onClick={() => pushChat('system', '개인 계정 정보는 Codex 로그인 상태를 따릅니다.')}>
+                개인 계정
+              </button>
               <button className="settings-menu-item" onClick={() => setSettingsOpen((prev) => !prev)}>
                 Codex 설정 {settingsOpen ? '닫기' : '열기'}
+              </button>
+              <button className="settings-menu-item" onClick={() => pushChat('system', 'IDE 설정 메뉴는 현재 기본값으로 동작합니다.')}>
+                IDE 설정
+              </button>
+              <button className="settings-menu-item" onClick={() => pushChat('system', 'MCP 설정은 아래 토글에서 관리하세요.')}>
+                MCP 설정
               </button>
               <button
                 className="settings-menu-item"
@@ -494,6 +503,15 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
                 disabled={!codexState?.codexHome}
               >
                 MCP 설정 열기
+              </button>
+              <button className="settings-menu-item" onClick={() => pushChat('system', '시스템 설정은 로컬 Codex Home 기반으로 동작합니다.')}>
+                시스템 설정
+              </button>
+              <button className="settings-menu-item" onClick={() => pushChat('system', '언어: ko-KR (현재 고정)')}>
+                언어
+              </button>
+              <button className="settings-menu-item" onClick={() => pushChat('system', '단축키: Ctrl/Cmd+S 저장, Ctrl/Cmd+W 탭 닫기')}>
+                키보드 단축키
               </button>
 
               <div className="settings-divider" />
