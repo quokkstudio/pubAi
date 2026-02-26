@@ -94,6 +94,16 @@ const MCP_PRESETS: Record<CodexMcpPreset, McpPresetSpec> = {
 };
 
 function getCodexHome(cwd: string): string {
+  const resolved = path.resolve(cwd);
+  const normalized = resolved.replace(/\\/g, '/');
+  const m = normalized.match(/^(.*)\/projects\/[^/]+\/local(?:\/.*)?$/i);
+  if (m?.[1]) {
+    return path.join(path.normalize(m[1]), '.codex-home');
+  }
+  return path.join(resolved, '.codex-home');
+}
+
+function getLegacyProjectCodexHome(cwd: string): string {
   return path.join(path.resolve(cwd), '.codex-home');
 }
 
@@ -109,10 +119,66 @@ function getCodexAuthPath(codexHome: string): string {
   return path.join(codexHome, 'auth.json');
 }
 
+async function pathExists(targetPath: string): Promise<boolean> {
+  return fs
+    .access(targetPath)
+    .then(() => true)
+    .catch(() => false);
+}
+
+async function copyIfMissing(sourcePath: string, targetPath: string): Promise<void> {
+  const [sourceExists, targetExists] = await Promise.all([pathExists(sourcePath), pathExists(targetPath)]);
+  if (!sourceExists || targetExists) {
+    return;
+  }
+  await fs.cp(sourcePath, targetPath, { recursive: true });
+}
+
+async function migrateLegacyCodexHome(cwd: string, codexHome: string): Promise<void> {
+  const legacyHome = getLegacyProjectCodexHome(cwd);
+  const normalizedLegacy = path.resolve(legacyHome);
+  const normalizedTarget = path.resolve(codexHome);
+  if (normalizedLegacy === normalizedTarget) {
+    return;
+  }
+
+  const legacyExists = await pathExists(legacyHome);
+  if (!legacyExists) {
+    return;
+  }
+
+  await fs.mkdir(codexHome, { recursive: true });
+
+  const filesToMigrate = ['auth.json', 'config.toml', 'devmanager-settings.json', 'models_cache.json'];
+  const dirsToMigrate = ['sessions', 'skills', 'tmp'];
+
+  for (const fileName of filesToMigrate) {
+    await copyIfMissing(path.join(legacyHome, fileName), path.join(codexHome, fileName));
+  }
+  for (const dirName of dirsToMigrate) {
+    await copyIfMissing(path.join(legacyHome, dirName), path.join(codexHome, dirName));
+  }
+}
+
+async function importFromUserCodexHomeIfNeeded(codexHome: string): Promise<void> {
+  const targetAuth = path.join(codexHome, 'auth.json');
+  const targetAuthExists = await pathExists(targetAuth);
+  if (targetAuthExists) {
+    return;
+  }
+
+  const userCodexHome = path.join(os.homedir(), '.codex');
+  await copyIfMissing(path.join(userCodexHome, 'auth.json'), targetAuth);
+  await copyIfMissing(path.join(userCodexHome, 'config.toml'), path.join(codexHome, 'config.toml'));
+  await copyIfMissing(path.join(userCodexHome, 'models_cache.json'), path.join(codexHome, 'models_cache.json'));
+}
+
 async function ensureCodexHome(cwd: string): Promise<{ codexHome: string; configPath: string }> {
   const codexHome = getCodexHome(cwd);
+  await migrateLegacyCodexHome(cwd, codexHome);
   const configPath = getCodexConfigPath(codexHome);
   await fs.mkdir(codexHome, { recursive: true });
+  await importFromUserCodexHomeIfNeeded(codexHome);
   await fs
     .access(configPath)
     .catch(async () => fs.writeFile(configPath, '', 'utf-8'));
