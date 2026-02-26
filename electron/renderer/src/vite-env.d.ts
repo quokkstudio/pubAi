@@ -1,5 +1,12 @@
 /// <reference types="vite/client" />
-import type { InitialSyncResult, ProjectAction, ProjectCreateInput, ProjectDetail, ProjectSummary } from './types';
+import type {
+  InitialSyncResult,
+  ProjectAction,
+  ProjectCreateInput,
+  ProjectDeployResult,
+  ProjectDetail,
+  ProjectSummary
+} from './types';
 
 interface DevManagerApi {
   getVersion: () => Promise<string>;
@@ -12,6 +19,7 @@ interface DevManagerApi {
   saveProjectDocs: (payload: { projectKey: string; projectInfo: string; workflow: string }) => Promise<ProjectDetail>;
   recordProjectAction: (payload: { projectKey: string; action: ProjectAction }) => Promise<ProjectSummary>;
   runInitialSync: (payload: { projectKey: string }) => Promise<InitialSyncResult>;
+  runDeploy: (payload: { projectKey: string }) => Promise<ProjectDeployResult>;
 }
 
 declare global {

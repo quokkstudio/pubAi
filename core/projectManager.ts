@@ -2,6 +2,8 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { appendProjectLog } from './logger';
 import { downloadInitialSkin } from './ftpEngine';
+import { deployBySolution, type DeployResult } from './deployRouter';
+import type { MakeShopAutomationConfig } from './makeshopEngine';
 
 export type SolutionType = 'cafe24' | 'godomall' | 'makeshop';
 
@@ -23,6 +25,7 @@ export interface ProjectCreateInput {
   ftpPassword: string;
   ftpRemotePath?: string;
   skinId?: string;
+  makeshopAutomation?: MakeShopAutomationConfig;
   dueDate: string;
 }
 
@@ -39,6 +42,7 @@ export interface StoredProjectConfig {
   ftpPassword: ProjectSecret;
   ftpRemotePath?: string;
   skinId?: string;
+  makeshopAutomation?: MakeShopAutomationConfig;
   dueDate: string;
   createdAt: string;
   updatedAt: string;
@@ -75,6 +79,11 @@ export interface InitialSyncResult {
   localPath: string;
   fileCount?: number;
   syncedAt: string;
+}
+
+export interface ProjectDeployResult extends DeployResult {
+  projectKey: string;
+  solutionType: SolutionType;
 }
 
 const CONFIG_FILE = 'config.json';
@@ -255,6 +264,7 @@ export async function createProject(projectsRoot: string, input: ProjectCreateIn
     ftpPassword: { value: input.ftpPassword, encrypted: false },
     ftpRemotePath: input.ftpRemotePath?.trim() || '/',
     skinId: input.skinId?.trim() || undefined,
+    makeshopAutomation: input.makeshopAutomation,
     dueDate: input.dueDate,
     createdAt: now,
     updatedAt: now,
@@ -445,6 +455,45 @@ export async function runInitialSync(projectsRoot: string, projectKey: string): 
   } catch (error) {
     const message = error instanceof Error ? error.message : 'FTP 최초 동기화 실패';
     await appendProjectLog(paths.projectPath, `최초 동기화 실패: ${message}`);
+    throw error;
+  }
+}
+
+export async function runDeploy(projectsRoot: string, projectKey: string): Promise<ProjectDeployResult> {
+  const paths = buildPaths(projectsRoot, projectKey);
+  const config = await readJsonFile<StoredProjectConfig>(paths.configPath);
+
+  await appendProjectLog(paths.projectPath, `배포 시작: ${config.solutionType}`);
+
+  try {
+    const result = await deployBySolution({
+      solutionType: config.solutionType,
+      projectPath: paths.projectPath,
+      localPath: paths.localPath,
+      adminUrl: config.adminUrl,
+      adminId: config.adminId,
+      adminPassword: config.adminPassword.value,
+      skinId: config.skinId,
+      makeshopAutomation: config.makeshopAutomation,
+      onLog: async (message) => {
+        await appendProjectLog(paths.projectPath, message);
+      }
+    });
+
+    const now = result.finishedAt || new Date().toISOString();
+    config.updatedAt = now;
+    config.lastWorkedAt = now;
+    await writeJsonFile(paths.configPath, config);
+    await appendProjectLog(paths.projectPath, `배포 완료: ${result.message}`);
+
+    return {
+      projectKey,
+      solutionType: config.solutionType,
+      ...result
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '배포 실패';
+    await appendProjectLog(paths.projectPath, `배포 실패: ${message}`);
     throw error;
   }
 }

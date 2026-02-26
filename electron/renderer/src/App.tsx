@@ -129,6 +129,11 @@ export default function App() {
       if (action === 'sync') {
         const syncResult = await api.runInitialSync({ projectKey });
         pushLog(`${projectKey}: ${syncResult.message}`);
+      } else if (action === 'deploy') {
+        const deployResult = await api.runDeploy({ projectKey });
+        pushLog(`${projectKey}: ${deployResult.message}`);
+        const refreshed = await api.getProjectDetail(projectKey);
+        setSelectedProject(refreshed);
       } else {
         updatedSummary = await api.recordProjectAction({ projectKey, action });
         pushLog(`${updatedSummary.name}: ${actionLabel}`);

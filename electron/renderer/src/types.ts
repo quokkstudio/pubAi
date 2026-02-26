@@ -71,3 +71,14 @@ export interface InitialSyncResult {
   fileCount?: number;
   syncedAt: string;
 }
+
+export interface ProjectDeployResult {
+  projectKey: string;
+  solutionType: SolutionType;
+  mode: 'cafe24-delta' | 'godomall-delta' | 'makeshop-playwright';
+  message: string;
+  startedAt: string;
+  finishedAt: string;
+  archivePath?: string;
+  uploadedFileName?: string;
+}

@@ -13,5 +13,6 @@ contextBridge.exposeInMainWorld('devManager', {
     ipcRenderer.invoke('projects:saveDocs', payload),
   recordProjectAction: (payload: { projectKey: string; action: ProjectAction }): Promise<unknown> =>
     ipcRenderer.invoke('projects:recordAction', payload),
-  runInitialSync: (payload: { projectKey: string }): Promise<unknown> => ipcRenderer.invoke('projects:initialSync', payload)
+  runInitialSync: (payload: { projectKey: string }): Promise<unknown> => ipcRenderer.invoke('projects:initialSync', payload),
+  runDeploy: (payload: { projectKey: string }): Promise<unknown> => ipcRenderer.invoke('projects:deploy', payload)
 });
