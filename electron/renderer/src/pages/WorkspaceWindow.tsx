@@ -24,6 +24,10 @@ function nowLabel(): string {
   return new Date().toLocaleTimeString('ko-KR', { hour12: false });
 }
 
+function toPosixPath(input: string): string {
+  return input.replace(/\\/g, '/');
+}
+
 export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
   const api = window.devManager;
   const [projectDetail, setProjectDetail] = useState<ProjectDetail | null>(null);
@@ -68,6 +72,27 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
 
   function pushChat(role: ChatMessage['role'], content: string): void {
     setCodexMessages((prev) => [...prev, { role, content, timestamp: nowLabel() }].slice(-80));
+  }
+
+  function getRelativePathFromLocal(absolutePath: string): string | null {
+    if (!projectDetail || !absolutePath) {
+      return null;
+    }
+
+    const base = toPosixPath(projectDetail.summary.localPath).replace(/\/+$/, '');
+    const target = toPosixPath(absolutePath);
+    const lowerBase = base.toLowerCase();
+    const lowerTarget = target.toLowerCase();
+
+    if (lowerTarget === lowerBase) {
+      return '';
+    }
+
+    if (!lowerTarget.startsWith(`${lowerBase}/`)) {
+      return null;
+    }
+
+    return target.slice(base.length + 1);
   }
 
   function hasMcpServer(name: string): boolean {
@@ -510,9 +535,17 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
               <button
                 className="settings-menu-item"
                 onClick={() => {
-                  if (codexState?.configPath) {
-                    void api.openPath(codexState.configPath);
+                  if (!codexState?.configPath) {
+                    return;
                   }
+
+                  const relativePath = getRelativePathFromLocal(codexState.configPath);
+                  if (relativePath) {
+                    void openFile(relativePath);
+                    return;
+                  }
+
+                  void api.openPath(codexState.configPath);
                 }}
                 disabled={!codexState?.configPath}
               >
