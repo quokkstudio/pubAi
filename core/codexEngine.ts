@@ -302,7 +302,7 @@ export async function startCodexLoginWithChatGPT(cwd: string): Promise<CodexLogi
 
   if (process.platform === 'win32') {
     const quotedBinary = command.includes(' ') ? `"${command}"` : command;
-    const loginCommand = `${quotedBinary} login --device-auth`;
+    const loginCommand = `${quotedBinary} login || ${quotedBinary} login --device-auth`;
 
     await new Promise<void>((resolve, reject) => {
       const child = spawn(
@@ -330,7 +330,7 @@ export async function startCodexLoginWithChatGPT(cwd: string): Promise<CodexLogi
     return {
       started: true,
       message:
-        '로그인용 CMD 창을 열었습니다. 창 안내에 따라 인증을 완료한 뒤 앱에서 "로그인 상태 새로고침"을 눌러주세요.'
+        '로그인용 CMD 창을 열었습니다. 먼저 브라우저 자동 로그인(codex login)을 시도하고, 필요 시 device-auth로 자동 전환됩니다. 인증 후 "로그인 상태 새로고침"을 눌러주세요.'
     };
   }
 
