@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { Client, enterPassiveModeIPv4 } from 'basic-ftp';
+import { Client, enterPassiveModeIPv4, FileType } from 'basic-ftp';
 
 export interface FtpCredential {
   host: string;
@@ -44,6 +44,11 @@ function isRetryableFtpError(error: unknown): boolean {
   return /ETIMEDOUT|ECONNRESET|EPIPE|Socket closed|data connection/i.test(message);
 }
 
+function isPermissionDeniedFtpError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /(^|\\s)550\\b|Permission denied/i.test(message);
+}
+
 async function emptyDirectory(targetPath: string): Promise<void> {
   await fs.mkdir(targetPath, { recursive: true });
   const entries = await fs.readdir(targetPath, { withFileTypes: true });
@@ -73,18 +78,55 @@ async function countLocalFiles(targetPath: string): Promise<number> {
 }
 
 async function assertRemotePathExists(client: Client, remotePath: string): Promise<void> {
-  const entries = await client.list(remotePath);
-  let count = 0;
+  await client.list(remotePath);
+}
+
+function joinRemotePath(basePath: string, name: string): string {
+  const trimmed = basePath.replace(/\/$/, '');
+  if (!trimmed) {
+    return `/${name}`;
+  }
+  return `${trimmed}/${name}`;
+}
+
+async function downloadDirectoryRecursive(client: Client, remoteDir: string, localDir: string): Promise<void> {
+  await fs.mkdir(localDir, { recursive: true });
+
+  let entries;
+  try {
+    entries = await client.list(remoteDir);
+  } catch (error) {
+    if (isPermissionDeniedFtpError(error)) {
+      return;
+    }
+    throw error;
+  }
 
   for (const entry of entries) {
     if (entry.name === '.' || entry.name === '..') {
       continue;
     }
 
-    count += 1;
-  }
-  if (count >= 0) {
-    return;
+    const remoteEntryPath = joinRemotePath(remoteDir, entry.name);
+    const localEntryPath = path.join(localDir, entry.name);
+
+    if (entry.type === FileType.Directory) {
+      await downloadDirectoryRecursive(client, remoteEntryPath, localEntryPath);
+      continue;
+    }
+
+    if (entry.type !== FileType.File) {
+      continue;
+    }
+
+    try {
+      await client.downloadTo(localEntryPath, remoteEntryPath);
+    } catch (error) {
+      if (isPermissionDeniedFtpError(error)) {
+        continue;
+      }
+      throw error;
+    }
   }
 }
 
@@ -113,7 +155,7 @@ export async function downloadInitialSkin(input: InitialSyncInput): Promise<Init
 
       await assertRemotePathExists(client, remotePath);
       await emptyDirectory(input.localPath);
-      await client.downloadToDir(input.localPath, remotePath);
+      await downloadDirectoryRecursive(client, remotePath, input.localPath);
       const fileCount = await countLocalFiles(input.localPath);
 
       return {
