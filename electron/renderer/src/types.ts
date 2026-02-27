@@ -93,6 +93,12 @@ export interface ProjectRestoreResult {
   finishedAt: string;
 }
 
+export interface ProjectDeleteResult {
+  projectKey: string;
+  deletedAt: string;
+  message: string;
+}
+
 export interface WorkspaceEntry {
   name: string;
   relativePath: string;

@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('devManager', {
   openInVSCode: (targetPath: string): Promise<string> => ipcRenderer.invoke('shell:openInVSCode', targetPath),
   listProjects: (): Promise<unknown> => ipcRenderer.invoke('projects:list'),
   createProject: (payload: ProjectCreateInput): Promise<unknown> => ipcRenderer.invoke('projects:create', payload),
+  deleteProject: (payload: { projectKey: string }): Promise<unknown> => ipcRenderer.invoke('projects:delete', payload),
   getProjectDetail: (projectKey: string): Promise<unknown> => ipcRenderer.invoke('projects:getDetail', projectKey),
   saveProjectDocs: (payload: { projectKey: string; projectInfo: string; workflow: string }): Promise<unknown> =>
     ipcRenderer.invoke('projects:saveDocs', payload),

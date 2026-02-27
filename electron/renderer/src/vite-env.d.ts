@@ -6,6 +6,7 @@ import type {
   InitialSyncResult,
   ProjectAction,
   ProjectCreateInput,
+  ProjectDeleteResult,
   ProjectDeployResult,
   ProjectRestoreResult,
   ProjectDetail,
@@ -22,6 +23,7 @@ interface DevManagerApi {
   openInVSCode: (targetPath: string) => Promise<string>;
   listProjects: () => Promise<ProjectSummary[]>;
   createProject: (payload: ProjectCreateInput) => Promise<ProjectSummary>;
+  deleteProject: (payload: { projectKey: string }) => Promise<ProjectDeleteResult>;
   getProjectDetail: (projectKey: string) => Promise<ProjectDetail>;
   saveProjectDocs: (payload: { projectKey: string; projectInfo: string; workflow: string }) => Promise<ProjectDetail>;
   recordProjectAction: (payload: { projectKey: string; action: ProjectAction }) => Promise<ProjectSummary>;

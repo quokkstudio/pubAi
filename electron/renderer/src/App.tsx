@@ -46,6 +46,7 @@ function MainApp() {
   const [selectedProject, setSelectedProject] = useState<ProjectDetailType | null>(null);
   const [consoleLogs, setConsoleLogs] = useState<string[]>(['[init] STEP 2 준비 중...']);
   const [busy, setBusy] = useState(false);
+  const [busyMessage, setBusyMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
   const api = window.devManager;
@@ -88,7 +89,9 @@ function MainApp() {
     }
 
     setBusy(true);
+    setBusyMessage('프로젝트 생성중...');
     setErrorMessage('');
+    pushLog('프로젝트 생성 시작...');
 
     try {
       const created = await api.createProject(payload);
@@ -102,6 +105,7 @@ function MainApp() {
       throw error;
     } finally {
       setBusy(false);
+      setBusyMessage('');
     }
   }
 
@@ -111,7 +115,9 @@ function MainApp() {
     }
 
     setBusy(true);
+    setBusyMessage('문서 저장중...');
     setErrorMessage('');
+    pushLog(`${selectedProjectKey}: 문서 저장 시작...`);
 
     try {
       const updated = await api.saveProjectDocs({ projectKey: selectedProjectKey, projectInfo, workflow });
@@ -125,6 +131,7 @@ function MainApp() {
       throw error;
     } finally {
       setBusy(false);
+      setBusyMessage('');
     }
   }
 
@@ -139,13 +146,15 @@ function MainApp() {
         : action === 'deploy'
           ? '배포'
           : action === 'sync'
-            ? '최초 동기화'
+            ? '최초동기화'
             : action === 'restore'
-              ? '최초상태 복구'
+              ? '최초상태복구'
               : '저장';
 
     setBusy(true);
+    setBusyMessage(`${actionLabel}중...`);
     setErrorMessage('');
+    pushLog(`${projectKey}: ${actionLabel} 시작...`);
 
     try {
       let updatedSummary: ProjectSummary | null = null;
@@ -183,6 +192,47 @@ function MainApp() {
       pushLog(`오류: ${message}`);
     } finally {
       setBusy(false);
+      setBusyMessage('');
+    }
+  }
+
+  async function handleProjectDelete(projectKey: string): Promise<void> {
+    if (!api) {
+      return;
+    }
+
+    const target = projects.find((item) => item.projectKey === projectKey);
+    const confirmMessage = target
+      ? `프로젝트를 삭제할까요?\n- ${target.name} (${target.projectKey})\n\n서버(FTP)에는 영향이 없습니다.`
+      : `프로젝트를 삭제할까요? (${projectKey})\n\n서버(FTP)에는 영향이 없습니다.`;
+
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    setBusy(true);
+    setBusyMessage('프로젝트 삭제중...');
+    setErrorMessage('');
+    pushLog(`${projectKey}: 프로젝트 삭제 시작...`);
+
+    try {
+      const result = await api.deleteProject({ projectKey });
+      pushLog(result.message);
+
+      if (selectedProjectKey === projectKey) {
+        setSelectedProjectKey('');
+        setSelectedProject(null);
+        setView('dashboard');
+      }
+
+      await refreshProjects();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '프로젝트 삭제 실패';
+      setErrorMessage(message);
+      pushLog(`오류: ${message}`);
+    } finally {
+      setBusy(false);
+      setBusyMessage('');
     }
   }
 
@@ -232,6 +282,7 @@ function MainApp() {
         </header>
 
         <section className="content">
+          {busy && busyMessage && <div className="alert-info">{busyMessage}</div>}
           {errorMessage && <div className="alert-error">{errorMessage}</div>}
 
           {view === 'dashboard' && (
@@ -241,6 +292,7 @@ function MainApp() {
               onRefresh={() => void refreshProjects()}
               onSelect={(projectKey) => void openProjectDetail(projectKey)}
               onAction={(projectKey, action) => void handleProjectAction(projectKey, action)}
+              onDelete={(projectKey) => void handleProjectDelete(projectKey)}
               toDateLabel={toKoreanTimeLabel}
             />
           )}
@@ -263,6 +315,11 @@ function MainApp() {
               onAction={(action) => {
                 if (selectedProjectKey) {
                   void handleProjectAction(selectedProjectKey, action);
+                }
+              }}
+              onDelete={() => {
+                if (selectedProjectKey) {
+                  void handleProjectDelete(selectedProjectKey);
                 }
               }}
               toDateLabel={toKoreanTimeLabel}

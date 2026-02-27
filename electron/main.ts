@@ -19,6 +19,7 @@ import {
   autoUploadChangedFiles,
   collectLocalFileSnapshotMap,
   createProject,
+  deleteProject,
   diffLocalFileSnapshotMap,
   getProjectDetail,
   listProjects,
@@ -281,6 +282,10 @@ app.whenReady().then(() => {
 
   ipcMain.handle('projects:create', async (_, payload: ProjectCreateInput) => {
     return createProject(projectsRoot, payload);
+  });
+
+  ipcMain.handle('projects:delete', async (_, payload: { projectKey: string }) => {
+    return deleteProject(projectsRoot, payload.projectKey);
   });
 
   ipcMain.handle('projects:getDetail', async (_, projectKey: string) => {

@@ -96,6 +96,12 @@ export interface ProjectRestoreResult {
   finishedAt: string;
 }
 
+export interface ProjectDeleteResult {
+  projectKey: string;
+  deletedAt: string;
+  message: string;
+}
+
 export interface AutoUploadResult {
   attempted: boolean;
   uploaded: boolean;
@@ -172,6 +178,13 @@ function buildPaths(projectsRoot: string, projectKey: string): ProjectPaths {
     baselinePath: path.join(projectPath, SYNC_DIR, BASELINE_FILE),
     syncStatePath: path.join(projectPath, SYNC_DIR, SYNC_STATE_FILE)
   };
+}
+
+function assertProjectKeySafe(projectKey: string): void {
+  const normalized = normalizeProjectName(projectKey);
+  if (!normalized || normalized !== projectKey) {
+    throw new Error('유효하지 않은 프로젝트 키입니다.');
+  }
 }
 
 async function ensureProjectsRoot(projectsRoot: string): Promise<void> {
@@ -582,6 +595,28 @@ export async function listProjects(projectsRoot: string): Promise<ProjectSummary
   return summaries
     .filter((summary): summary is ProjectSummary => summary !== null)
     .sort((a, b) => b.lastWorkedAt.localeCompare(a.lastWorkedAt));
+}
+
+export async function deleteProject(projectsRoot: string, projectKey: string): Promise<ProjectDeleteResult> {
+  assertProjectKeySafe(projectKey);
+  const paths = buildPaths(projectsRoot, projectKey);
+
+  const exists = await fs
+    .stat(paths.projectPath)
+    .then((stat) => stat.isDirectory())
+    .catch(() => false);
+
+  if (!exists) {
+    throw new Error(`삭제할 프로젝트를 찾을 수 없습니다: ${projectKey}`);
+  }
+
+  await fs.rm(paths.projectPath, { recursive: true, force: true });
+  const deletedAt = new Date().toISOString();
+  return {
+    projectKey,
+    deletedAt,
+    message: `프로젝트 삭제 완료: ${projectKey}`
+  };
 }
 
 export async function getProjectDetail(projectsRoot: string, projectKey: string): Promise<ProjectDetail> {

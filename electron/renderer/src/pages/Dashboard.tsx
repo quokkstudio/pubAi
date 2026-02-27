@@ -6,10 +6,11 @@ interface DashboardProps {
   onRefresh: () => void;
   onSelect: (projectKey: string) => void;
   onAction: (projectKey: string, action: ProjectAction) => void;
+  onDelete: (projectKey: string) => void;
   toDateLabel: (isoString: string) => string;
 }
 
-export default function Dashboard({ projects, busy, onRefresh, onSelect, onAction, toDateLabel }: DashboardProps) {
+export default function Dashboard({ projects, busy, onRefresh, onSelect, onAction, onDelete, toDateLabel }: DashboardProps) {
   return (
     <div>
       <div className="section-header">
@@ -60,6 +61,9 @@ export default function Dashboard({ projects, busy, onRefresh, onSelect, onActio
                       </button>
                       <button onClick={() => onAction(project.projectKey, 'restore')} disabled={busy}>
                         복구
+                      </button>
+                      <button onClick={() => onDelete(project.projectKey)} disabled={busy}>
+                        삭제
                       </button>
                     </div>
                   </td>

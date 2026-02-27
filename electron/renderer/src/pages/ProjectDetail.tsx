@@ -8,6 +8,7 @@ interface ProjectDetailProps {
   onReload: () => void;
   onSave: (projectInfo: string, workflow: string) => void;
   onAction: (action: ProjectAction) => void;
+  onDelete: () => void;
   toDateLabel: (isoString: string) => string;
 }
 
@@ -18,6 +19,7 @@ export default function ProjectDetail({
   onReload,
   onSave,
   onAction,
+  onDelete,
   toDateLabel
 }: ProjectDetailProps) {
   const [projectInfoDraft, setProjectInfoDraft] = useState('');
@@ -87,6 +89,9 @@ export default function ProjectDetail({
           </button>
           <button onClick={() => onAction('deploy')} disabled={busy}>
             배포
+          </button>
+          <button onClick={onDelete} disabled={busy}>
+            삭제
           </button>
         </div>
 
