@@ -75,6 +75,30 @@ function sortSessions(sessions: CodexChatSession[]): CodexChatSession[] {
   return [...sessions].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
 }
 
+function buildPromptWithHistory(messages: CodexChatMessage[], userPrompt: string): string {
+  const history = messages
+    .slice(-20)
+    .map((message) => {
+      const role = message.role.toUpperCase();
+      return `${role}: ${message.content}`;
+    })
+    .join('\n\n');
+
+  if (!history.trim()) {
+    return userPrompt;
+  }
+
+  return [
+    '이전 대화 맥락:',
+    history,
+    '',
+    '요청:',
+    userPrompt,
+    '',
+    '위 대화 맥락을 이어서 답하고, 사용자가 "다시 해봐"라고 하면 직전 실패 작업을 재시도해라.'
+  ].join('\n');
+}
+
 function appendMessageToStore(
   store: CodexChatStore,
   sessionId: string,
@@ -281,6 +305,7 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
     }
 
     const userPrompt = prompt.trim();
+    const promptWithHistory = buildPromptWithHistory(activeSession.messages, userPrompt);
     setPrompt('');
     const userStore = appendMessageToStore(chatStore, activeSession.id, 'user', userPrompt);
     setChatStore(userStore);
@@ -292,7 +317,7 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
     await withBusy('Codex 응답 생성 중...', async () => {
       const result = await api.runCodex({
         projectKey,
-        prompt: userPrompt,
+        prompt: promptWithHistory,
         model,
         reasoningLevel,
         sandboxMode,
