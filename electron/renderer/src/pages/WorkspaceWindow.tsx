@@ -293,6 +293,9 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
       setSavedAt(result.savedAt);
       setDirtyFiles((prev) => ({ ...prev, [result.relativePath]: false }));
       pushChat('system', `파일 저장 완료: ${result.relativePath}`);
+      if (result.autoUpload?.attempted) {
+        pushChat('system', result.autoUpload.message);
+      }
     }).catch((error) => {
       const message = error instanceof Error ? error.message : '파일 저장 실패';
       setErrorMessage(message);

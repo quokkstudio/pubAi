@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { appendProjectLog } from './logger';
-import { downloadInitialSkin } from './ftpEngine';
+import { downloadInitialSkin, uploadDeltaFiles } from './ftpEngine';
 import { deployBySolution, type DeployResult } from './deployRouter';
 import type { MakeShopAutomationConfig } from './makeshopEngine';
 
@@ -84,6 +84,14 @@ export interface InitialSyncResult {
 export interface ProjectDeployResult extends DeployResult {
   projectKey: string;
   solutionType: SolutionType;
+}
+
+export interface AutoUploadResult {
+  attempted: boolean;
+  uploaded: boolean;
+  message: string;
+  relativePath: string;
+  uploadedAt?: string;
 }
 
 const CONFIG_FILE = 'config.json';
@@ -500,5 +508,97 @@ export async function runDeploy(projectsRoot: string, projectKey: string): Promi
     const message = error instanceof Error ? error.message : '배포 실패';
     await appendProjectLog(paths.projectPath, `배포 실패: ${message}`);
     throw error;
+  }
+}
+
+export async function autoUploadSavedFile(
+  projectsRoot: string,
+  projectKey: string,
+  relativePath: string
+): Promise<AutoUploadResult> {
+  const paths = buildPaths(projectsRoot, projectKey);
+  const config = await readJsonFile<StoredProjectConfig>(paths.configPath);
+  const normalizedRelativePath = relativePath.replace(/\\/g, '/').replace(/^\/+/, '');
+
+  if (config.solutionType !== 'cafe24' && config.solutionType !== 'godomall') {
+    return {
+      attempted: false,
+      uploaded: false,
+      message: '자동 업로드 대상 솔루션이 아닙니다.',
+      relativePath: normalizedRelativePath
+    };
+  }
+
+  const absolutePath = path.resolve(paths.localPath, normalizedRelativePath);
+  const checkRelative = path.relative(paths.localPath, absolutePath);
+  if (!normalizedRelativePath || checkRelative.startsWith('..') || path.isAbsolute(checkRelative)) {
+    return {
+      attempted: true,
+      uploaded: false,
+      message: '허용되지 않은 파일 경로입니다.',
+      relativePath: normalizedRelativePath
+    };
+  }
+
+  const stat = await fs.stat(absolutePath).catch(() => null);
+  if (!stat || !stat.isFile()) {
+    return {
+      attempted: true,
+      uploaded: false,
+      message: '업로드할 파일을 찾을 수 없습니다.',
+      relativePath: normalizedRelativePath
+    };
+  }
+
+  if (!config.ftpHost || !config.ftpUser || !config.ftpPassword.value) {
+    return {
+      attempted: true,
+      uploaded: false,
+      message: 'FTP 설정이 비어 있어 자동 업로드를 건너뜁니다.',
+      relativePath: normalizedRelativePath
+    };
+  }
+
+  const remotePath = config.ftpRemotePath?.trim() || '/';
+  await appendProjectLog(paths.projectPath, `자동 업로드 시작: ${normalizedRelativePath}`);
+
+  try {
+    const upload = await uploadDeltaFiles({
+      credential: {
+        host: config.ftpHost,
+        port: config.ftpPort ?? 21,
+        user: config.ftpUser,
+        password: config.ftpPassword.value
+      },
+      remotePath,
+      files: [
+        {
+          absolutePath,
+          relativePath: normalizedRelativePath
+        }
+      ]
+    });
+
+    config.updatedAt = upload.finishedAt;
+    config.lastWorkedAt = upload.finishedAt;
+    await writeJsonFile(paths.configPath, config);
+    await appendProjectLog(paths.projectPath, `자동 업로드 완료: ${normalizedRelativePath}`);
+
+    return {
+      attempted: true,
+      uploaded: true,
+      message: `자동 업로드 완료: ${normalizedRelativePath}`,
+      relativePath: normalizedRelativePath,
+      uploadedAt: upload.finishedAt
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '자동 업로드 실패';
+    await appendProjectLog(paths.projectPath, `자동 업로드 실패: ${normalizedRelativePath} - ${message}`);
+    return {
+      attempted: true,
+      uploaded: false,
+      message: `자동 업로드 실패: ${message}`,
+      relativePath: normalizedRelativePath
+    };
   }
 }

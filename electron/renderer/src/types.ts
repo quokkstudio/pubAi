@@ -97,6 +97,13 @@ export interface WorkspaceFileReadResult {
 export interface WorkspaceFileWriteResult {
   relativePath: string;
   savedAt: string;
+  autoUpload?: {
+    attempted: boolean;
+    uploaded: boolean;
+    message: string;
+    relativePath: string;
+    uploadedAt?: string;
+  };
 }
 
 export type CodexSandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access';

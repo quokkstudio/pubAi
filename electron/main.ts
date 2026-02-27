@@ -15,6 +15,7 @@ import {
   type CodexMcpPreset
 } from '../core/codexEngine';
 import {
+  autoUploadSavedFile,
   createProject,
   getProjectDetail,
   listProjects,
@@ -330,9 +331,12 @@ app.whenReady().then(() => {
       const detail = await getProjectDetail(projectsRoot, payload.projectKey);
       const fullPath = resolveLocalTarget(detail.summary.localPath, payload.relativePath);
       await fs.writeFile(fullPath, payload.content, 'utf-8');
+      const savedRelativePath = toPosixRelativePath(detail.summary.localPath, fullPath);
+      const autoUpload = await autoUploadSavedFile(projectsRoot, payload.projectKey, savedRelativePath);
       return {
-        relativePath: toPosixRelativePath(detail.summary.localPath, fullPath),
-        savedAt: new Date().toISOString()
+        relativePath: savedRelativePath,
+        savedAt: new Date().toISOString(),
+        autoUpload
       };
     }
   );
