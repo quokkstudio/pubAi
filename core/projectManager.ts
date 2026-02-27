@@ -473,6 +473,11 @@ export async function runDeploy(projectsRoot: string, projectKey: string): Promi
       adminUrl: config.adminUrl,
       adminId: config.adminId,
       adminPassword: config.adminPassword.value,
+      ftpHost: config.ftpHost,
+      ftpPort: config.ftpPort ?? 21,
+      ftpUser: config.ftpUser,
+      ftpPassword: config.ftpPassword.value,
+      ftpRemotePath: config.ftpRemotePath,
       skinId: config.skinId,
       makeshopAutomation: config.makeshopAutomation,
       onLog: async (message) => {

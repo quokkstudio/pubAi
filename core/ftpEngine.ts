@@ -22,6 +22,25 @@ export interface InitialSyncResult {
   syncedAt: string;
 }
 
+export interface DeltaUploadFile {
+  absolutePath: string;
+  relativePath: string;
+}
+
+export interface DeltaUploadInput {
+  credential: FtpCredential;
+  remotePath: string;
+  files: DeltaUploadFile[];
+  onProgress?: (uploaded: number, total: number, relativePath: string) => Promise<void> | void;
+}
+
+export interface DeltaUploadResult {
+  remotePath: string;
+  uploadedCount: number;
+  startedAt: string;
+  finishedAt: string;
+}
+
 const FTP_TIMEOUT_MS = 180_000;
 const MAX_RETRY = 3;
 
@@ -87,6 +106,15 @@ function joinRemotePath(basePath: string, name: string): string {
     return `/${name}`;
   }
   return `${trimmed}/${name}`;
+}
+
+function getRemoteParentDir(remoteFilePath: string): string {
+  const normalized = remoteFilePath.replace(/\/+/g, '/');
+  const idx = normalized.lastIndexOf('/');
+  if (idx <= 0) {
+    return '/';
+  }
+  return normalized.slice(0, idx);
 }
 
 async function downloadDirectoryRecursive(client: Client, remoteDir: string, localDir: string): Promise<void> {
@@ -163,6 +191,71 @@ export async function downloadInitialSkin(input: InitialSyncInput): Promise<Init
         localPath: input.localPath,
         fileCount,
         syncedAt: new Date().toISOString()
+      };
+    } catch (error) {
+      lastError = error;
+      if (!isRetryableFtpError(error) || attempt === MAX_RETRY) {
+        throw error;
+      }
+      await sleep(attempt * 1500);
+    } finally {
+      client.close();
+    }
+  }
+
+  throw lastError;
+}
+
+export async function uploadDeltaFiles(input: DeltaUploadInput): Promise<DeltaUploadResult> {
+  const host = input.credential.host.trim();
+  if (!host) {
+    throw new Error('FTP host가 비어 있습니다.');
+  }
+
+  const startedAt = new Date().toISOString();
+  const remotePath = normalizeRemotePath(input.remotePath);
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= MAX_RETRY; attempt += 1) {
+    const client = new Client(FTP_TIMEOUT_MS);
+    client.ftp.verbose = false;
+    client.prepareTransfer = enterPassiveModeIPv4;
+
+    try {
+      await client.access({
+        host,
+        port: input.credential.port ?? 21,
+        user: input.credential.user,
+        password: input.credential.password,
+        secure: false
+      });
+
+      await client.ensureDir(remotePath);
+      await client.cd('/');
+
+      let uploaded = 0;
+      const total = input.files.length;
+
+      for (const file of input.files) {
+        const normalizedRelative = file.relativePath.replace(/\\/g, '/').replace(/^\/+/, '');
+        const remoteFilePath = joinRemotePath(remotePath, normalizedRelative);
+        const remoteDir = getRemoteParentDir(remoteFilePath);
+
+        await client.ensureDir(remoteDir);
+        await client.cd('/');
+        await client.uploadFrom(file.absolutePath, remoteFilePath);
+
+        uploaded += 1;
+        if (input.onProgress) {
+          await input.onProgress(uploaded, total, normalizedRelative);
+        }
+      }
+
+      return {
+        remotePath,
+        uploadedCount: input.files.length,
+        startedAt,
+        finishedAt: new Date().toISOString()
       };
     } catch (error) {
       lastError = error;
