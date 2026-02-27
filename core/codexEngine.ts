@@ -304,6 +304,74 @@ async function getWindowsVscodeCodexCandidates(): Promise<string[]> {
   return matches;
 }
 
+async function getLinuxVscodeCodexCandidates(): Promise<string[]> {
+  const roots = [path.join(os.homedir(), '.vscode', 'extensions'), path.join(os.homedir(), '.vscode-server', 'extensions')];
+  const matches: string[] = [];
+
+  for (const root of roots) {
+    const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
+    const versions = entries
+      .filter((entry) => entry.isDirectory() && /^openai\.chatgpt-.*-linux/i.test(entry.name))
+      .map((entry) => entry.name)
+      .sort((a, b) => b.localeCompare(a, 'en', { numeric: true, sensitivity: 'base' }));
+
+    for (const versionDir of versions) {
+      const archCandidates = ['linux-x86_64', 'linux-arm64'];
+      for (const arch of archCandidates) {
+        const candidate = path.join(root, versionDir, 'bin', arch, 'codex');
+        if (await pathExists(candidate)) {
+          matches.push(candidate);
+        }
+      }
+    }
+  }
+
+  return matches;
+}
+
+async function getDarwinVscodeCodexCandidates(): Promise<string[]> {
+  const roots = [path.join(os.homedir(), '.vscode', 'extensions'), path.join(os.homedir(), '.vscode-insiders', 'extensions')];
+  const matches: string[] = [];
+
+  for (const root of roots) {
+    const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
+    const versions = entries
+      .filter((entry) => entry.isDirectory() && /^openai\.chatgpt-.*-darwin/i.test(entry.name))
+      .map((entry) => entry.name)
+      .sort((a, b) => b.localeCompare(a, 'en', { numeric: true, sensitivity: 'base' }));
+
+    for (const versionDir of versions) {
+      const archCandidates = ['darwin-arm64', 'darwin-x64'];
+      for (const arch of archCandidates) {
+        const candidate = path.join(root, versionDir, 'bin', arch, 'codex');
+        if (await pathExists(candidate)) {
+          matches.push(candidate);
+        }
+      }
+    }
+  }
+
+  return matches;
+}
+
+async function getNvmCodexCandidates(): Promise<string[]> {
+  const root = path.join(os.homedir(), '.nvm', 'versions', 'node');
+  const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
+  const versions = entries
+    .filter((entry) => entry.isDirectory() && /^v\d+/i.test(entry.name))
+    .map((entry) => entry.name)
+    .sort((a, b) => b.localeCompare(a, 'en', { numeric: true, sensitivity: 'base' }));
+
+  const matches: string[] = [];
+  for (const versionDir of versions) {
+    const candidate = path.join(root, versionDir, 'bin', 'codex');
+    if (await pathExists(candidate)) {
+      matches.push(candidate);
+    }
+  }
+  return matches;
+}
+
 async function getCodexCommandCandidates(preferredCommand: string): Promise<string[]> {
   const candidates = new Set<string>();
 
@@ -321,9 +389,28 @@ async function getCodexCommandCandidates(preferredCommand: string): Promise<stri
       addCandidate(candidates, candidate);
     }
   } else {
+    const nvmCandidates = await getNvmCodexCandidates();
+    for (const candidate of nvmCandidates) {
+      addCandidate(candidates, candidate);
+    }
+
+    if (process.platform === 'darwin') {
+      const vscodeCandidates = await getDarwinVscodeCodexCandidates();
+      for (const candidate of vscodeCandidates) {
+        addCandidate(candidates, candidate);
+      }
+    } else {
+      const vscodeCandidates = await getLinuxVscodeCodexCandidates();
+      for (const candidate of vscodeCandidates) {
+        addCandidate(candidates, candidate);
+      }
+    }
+
     addCandidate(candidates, path.join(os.homedir(), '.local', 'bin', 'codex'));
+    addCandidate(candidates, path.join(os.homedir(), '.npm-global', 'bin', 'codex'));
     addCandidate(candidates, '/usr/local/bin/codex');
     addCandidate(candidates, '/opt/homebrew/bin/codex');
+    addCandidate(candidates, '/usr/bin/codex');
   }
 
   return [...candidates];
@@ -350,6 +437,9 @@ async function runCodexCommandResolved(
   for (const command of candidates) {
     try {
       const result = await runSingleCodexCommand(command, options.args, options.cwd, codexHome, usePipeStdin);
+      if (result.exitCode === -2) {
+        continue;
+      }
       await persistResolvedCodexCommand(codexHome, command);
       return { command, result };
     } catch (error) {
