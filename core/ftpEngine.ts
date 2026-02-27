@@ -41,6 +41,20 @@ export interface DeltaUploadResult {
   finishedAt: string;
 }
 
+export interface DeltaDeleteInput {
+  credential: FtpCredential;
+  remotePath: string;
+  relativePaths: string[];
+  onProgress?: (deleted: number, total: number, relativePath: string) => Promise<void> | void;
+}
+
+export interface DeltaDeleteResult {
+  remotePath: string;
+  deletedCount: number;
+  startedAt: string;
+  finishedAt: string;
+}
+
 const FTP_TIMEOUT_MS = 180_000;
 const MAX_RETRY = 3;
 
@@ -254,6 +268,71 @@ export async function uploadDeltaFiles(input: DeltaUploadInput): Promise<DeltaUp
       return {
         remotePath,
         uploadedCount: input.files.length,
+        startedAt,
+        finishedAt: new Date().toISOString()
+      };
+    } catch (error) {
+      lastError = error;
+      if (!isRetryableFtpError(error) || attempt === MAX_RETRY) {
+        throw error;
+      }
+      await sleep(attempt * 1500);
+    } finally {
+      client.close();
+    }
+  }
+
+  throw lastError;
+}
+
+export async function deleteRemoteFiles(input: DeltaDeleteInput): Promise<DeltaDeleteResult> {
+  const host = input.credential.host.trim();
+  if (!host) {
+    throw new Error('FTP host가 비어 있습니다.');
+  }
+
+  const startedAt = new Date().toISOString();
+  const remotePath = normalizeRemotePath(input.remotePath);
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= MAX_RETRY; attempt += 1) {
+    const client = new Client(FTP_TIMEOUT_MS);
+    client.ftp.verbose = false;
+    client.prepareTransfer = enterPassiveModeIPv4;
+
+    try {
+      await client.access({
+        host,
+        port: input.credential.port ?? 21,
+        user: input.credential.user,
+        password: input.credential.password,
+        secure: false
+      });
+
+      let deleted = 0;
+      const total = input.relativePaths.length;
+
+      for (const relativePath of input.relativePaths) {
+        const normalizedRelative = relativePath.replace(/\\/g, '/').replace(/^\/+/, '');
+        const remoteFilePath = joinRemotePath(remotePath, normalizedRelative);
+
+        try {
+          await client.remove(remoteFilePath);
+          deleted += 1;
+          if (input.onProgress) {
+            await input.onProgress(deleted, total, normalizedRelative);
+          }
+        } catch (error) {
+          if (isPermissionDeniedFtpError(error)) {
+            continue;
+          }
+          throw error;
+        }
+      }
+
+      return {
+        remotePath,
+        deletedCount: deleted,
         startedAt,
         finishedAt: new Date().toISOString()
       };

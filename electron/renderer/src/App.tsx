@@ -133,7 +133,16 @@ function MainApp() {
       return;
     }
 
-    const actionLabel = action === 'run' ? '실행' : action === 'deploy' ? '배포' : action === 'sync' ? '최초 동기화' : '저장';
+    const actionLabel =
+      action === 'run'
+        ? '실행'
+        : action === 'deploy'
+          ? '배포'
+          : action === 'sync'
+            ? '최초 동기화'
+            : action === 'restore'
+              ? '최초상태 복구'
+              : '저장';
 
     setBusy(true);
     setErrorMessage('');
@@ -144,6 +153,11 @@ function MainApp() {
       if (action === 'sync') {
         const syncResult = await api.runInitialSync({ projectKey });
         pushLog(`${projectKey}: ${syncResult.message}`);
+      } else if (action === 'restore') {
+        const restoreResult = await api.runRestoreInitial({ projectKey });
+        pushLog(`${projectKey}: ${restoreResult.message}`);
+        const refreshed = await api.getProjectDetail(projectKey);
+        setSelectedProject(refreshed);
       } else if (action === 'deploy') {
         const deployResult = await api.runDeploy({ projectKey });
         pushLog(`${projectKey}: ${deployResult.message}`);

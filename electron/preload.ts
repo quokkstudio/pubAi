@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('devManager', {
     ipcRenderer.invoke('projects:recordAction', payload),
   runInitialSync: (payload: { projectKey: string }): Promise<unknown> => ipcRenderer.invoke('projects:initialSync', payload),
   runDeploy: (payload: { projectKey: string }): Promise<unknown> => ipcRenderer.invoke('projects:deploy', payload),
+  runRestoreInitial: (payload: { projectKey: string }): Promise<unknown> =>
+    ipcRenderer.invoke('projects:restoreInitial', payload),
   openWorkspaceWindow: (payload: { projectKey: string }): Promise<unknown> =>
     ipcRenderer.invoke('workspace:openWindow', payload),
   workspaceListEntries: (payload: { projectKey: string; relativePath?: string }): Promise<unknown> =>

@@ -16,12 +16,16 @@ import {
 } from '../core/codexEngine';
 import {
   autoUploadSavedFile,
+  autoUploadChangedFiles,
+  collectLocalFileSnapshotMap,
   createProject,
+  diffLocalFileSnapshotMap,
   getProjectDetail,
   listProjects,
   recordProjectAction,
   runDeploy,
   runInitialSync,
+  runRestoreInitial,
   saveProjectDocs,
   type ProjectAction,
   type ProjectCreateInput
@@ -305,6 +309,10 @@ app.whenReady().then(() => {
     return runDeploy(projectsRoot, payload.projectKey);
   });
 
+  ipcMain.handle('projects:restoreInitial', async (_, payload: { projectKey: string }) => {
+    return runRestoreInitial(projectsRoot, payload.projectKey);
+  });
+
   ipcMain.handle('workspace:openWindow', async (_, payload: { projectKey: string }) => {
     createWorkspaceWindow(payload.projectKey);
     return true;
@@ -355,7 +363,8 @@ app.whenReady().then(() => {
       }
     ) => {
       const detail = await getProjectDetail(projectsRoot, payload.projectKey);
-      return runCodex({
+      const beforeSnapshot = await collectLocalFileSnapshotMap(detail.summary.localPath);
+      const codexResult = await runCodex({
         cwd: detail.summary.localPath,
         prompt: payload.prompt,
         model: payload.model,
@@ -363,6 +372,24 @@ app.whenReady().then(() => {
         sandboxMode: payload.sandboxMode,
         attachments: payload.attachments
       });
+
+      const afterSnapshot = await collectLocalFileSnapshotMap(detail.summary.localPath);
+      const diff = diffLocalFileSnapshotMap(beforeSnapshot, afterSnapshot);
+      const syncResult = await autoUploadChangedFiles(projectsRoot, payload.projectKey, diff.upserted, diff.deleted);
+      const uploadNotice =
+        diff.upserted.length > 0 || diff.deleted.length > 0 ? `\n[자동업로드] ${syncResult.message}` : '';
+
+      if (codexResult.ok) {
+        return {
+          ...codexResult,
+          output: `${codexResult.output || ''}${uploadNotice}`.trim()
+        };
+      }
+
+      return {
+        ...codexResult,
+        stderr: `${codexResult.stderr || ''}${uploadNotice}`.trim()
+      };
     }
   );
 

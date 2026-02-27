@@ -82,6 +82,9 @@ export default function ProjectDetail({
           <button onClick={() => onAction('sync')} disabled={busy}>
             최초 동기화
           </button>
+          <button onClick={() => onAction('restore')} disabled={busy}>
+            복구
+          </button>
           <button onClick={() => onAction('deploy')} disabled={busy}>
             배포
           </button>

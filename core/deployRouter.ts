@@ -127,6 +127,13 @@ function detectChangedFiles(snapshot: LocalFileSnapshot[], manifest: DeltaManife
   });
 }
 
+function detectDeletedFiles(snapshot: LocalFileSnapshot[], manifest: DeltaManifest): string[] {
+  const currentSet = new Set(snapshot.map((item) => item.relativePath));
+  return Object.keys(manifest.files)
+    .filter((relativePath) => !currentSet.has(relativePath))
+    .sort((a, b) => a.localeCompare(b));
+}
+
 async function deployFtpDelta(
   context: DeployContext,
   solutionType: 'cafe24' | 'godomall'
@@ -144,13 +151,25 @@ async function deployFtpDelta(
   const snapshot = await collectLocalFileSnapshot(context.localPath);
   const previousManifest = await readDeltaManifest(manifestPath);
   const changedFiles = detectChangedFiles(snapshot, previousManifest);
+  const deletedFiles = detectDeletedFiles(snapshot, previousManifest);
+
+  if (deletedFiles.length > 0) {
+    const preview =
+      deletedFiles.length > 12
+        ? `${deletedFiles.slice(0, 12).join(', ')} ...(+${deletedFiles.length - 12})`
+        : deletedFiles.join(', ');
+    await context.onLog?.(`서버 자동삭제 금지: 수동 삭제 필요 ${deletedFiles.length}개 (${preview})`);
+  }
 
   if (changedFiles.length === 0) {
     const finishedAt = new Date().toISOString();
     await context.onLog?.(`${solutionType} 변경 파일 없음 (manifest 기준)`);
     return {
       mode: solutionType === 'cafe24' ? 'cafe24-delta' : 'godomall-delta',
-      message: `변경 파일 없음 (${snapshot.length} files scanned)`,
+      message:
+        deletedFiles.length > 0
+          ? `변경 파일 없음 (${snapshot.length} files scanned), 삭제 ${deletedFiles.length}개는 수동 처리 필요`
+          : `변경 파일 없음 (${snapshot.length} files scanned)`,
       startedAt,
       finishedAt
     };
@@ -182,7 +201,10 @@ async function deployFtpDelta(
 
   return {
     mode: solutionType === 'cafe24' ? 'cafe24-delta' : 'godomall-delta',
-    message: `변경 파일 ${upload.uploadedCount}개 배포 완료`,
+    message:
+      deletedFiles.length > 0
+        ? `변경 파일 ${upload.uploadedCount}개 배포 완료, 삭제 ${deletedFiles.length}개는 수동 처리 필요`
+        : `변경 파일 ${upload.uploadedCount}개 배포 완료`,
     startedAt,
     finishedAt: upload.finishedAt
   };

@@ -7,6 +7,7 @@ import type {
   ProjectAction,
   ProjectCreateInput,
   ProjectDeployResult,
+  ProjectRestoreResult,
   ProjectDetail,
   ProjectSummary,
   WorkspaceEntry,
@@ -26,6 +27,7 @@ interface DevManagerApi {
   recordProjectAction: (payload: { projectKey: string; action: ProjectAction }) => Promise<ProjectSummary>;
   runInitialSync: (payload: { projectKey: string }) => Promise<InitialSyncResult>;
   runDeploy: (payload: { projectKey: string }) => Promise<ProjectDeployResult>;
+  runRestoreInitial: (payload: { projectKey: string }) => Promise<ProjectRestoreResult>;
   openWorkspaceWindow: (payload: { projectKey: string }) => Promise<boolean>;
   workspaceListEntries: (payload: { projectKey: string; relativePath?: string }) => Promise<WorkspaceEntry[]>;
   workspaceReadFile: (payload: { projectKey: string; relativePath: string }) => Promise<WorkspaceFileReadResult>;

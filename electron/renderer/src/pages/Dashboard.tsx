@@ -58,6 +58,9 @@ export default function Dashboard({ projects, busy, onRefresh, onSelect, onActio
                       <button onClick={() => onAction(project.projectKey, 'sync')} disabled={busy}>
                         최초 동기화
                       </button>
+                      <button onClick={() => onAction(project.projectKey, 'restore')} disabled={busy}>
+                        복구
+                      </button>
                     </div>
                   </td>
                 </tr>

@@ -1,6 +1,6 @@
 export type SolutionType = 'cafe24' | 'godomall' | 'makeshop';
 
-export type ProjectAction = 'run' | 'deploy' | 'sync' | 'save-docs';
+export type ProjectAction = 'run' | 'deploy' | 'sync' | 'restore' | 'save-docs';
 
 export interface ProjectSecret {
   value: string;
@@ -81,6 +81,16 @@ export interface ProjectDeployResult {
   finishedAt: string;
   archivePath?: string;
   uploadedFileName?: string;
+}
+
+export interface ProjectRestoreResult {
+  projectKey: string;
+  solutionType: SolutionType;
+  restoredFileCount: number;
+  deletedFileCount: number;
+  message: string;
+  startedAt: string;
+  finishedAt: string;
 }
 
 export interface WorkspaceEntry {
