@@ -101,15 +101,25 @@ const MCP_PRESETS: Record<CodexMcpPreset, McpPresetSpec> = {
 function getCodexHome(cwd: string): string {
   const resolved = path.resolve(cwd);
   const normalized = resolved.replace(/\\/g, '/');
-  const m = normalized.match(/^(.*)\/projects\/[^/]+\/local(?:\/.*)?$/i);
+  const m = normalized.match(/^(.*\/projects\/[^/]+)\/local(?:\/.*)?$/i);
   if (m?.[1]) {
     return path.join(path.normalize(m[1]), '.codex-home');
   }
   return path.join(resolved, '.codex-home');
 }
 
-function getLegacyProjectCodexHome(cwd: string): string {
+function getLegacyLocalCodexHome(cwd: string): string {
   return path.join(path.resolve(cwd), '.codex-home');
+}
+
+function getLegacyWorkspaceCodexHome(cwd: string): string | null {
+  const resolved = path.resolve(cwd);
+  const normalized = resolved.replace(/\\/g, '/');
+  const m = normalized.match(/^(.*)\/projects\/[^/]+\/local(?:\/.*)?$/i);
+  if (!m?.[1]) {
+    return null;
+  }
+  return path.join(path.normalize(m[1]), '.codex-home');
 }
 
 function getCodexConfigPath(codexHome: string): string {
@@ -140,28 +150,33 @@ async function copyIfMissing(sourcePath: string, targetPath: string): Promise<vo
 }
 
 async function migrateLegacyCodexHome(cwd: string, codexHome: string): Promise<void> {
-  const legacyHome = getLegacyProjectCodexHome(cwd);
-  const normalizedLegacy = path.resolve(legacyHome);
   const normalizedTarget = path.resolve(codexHome);
-  if (normalizedLegacy === normalizedTarget) {
-    return;
-  }
-
-  const legacyExists = await pathExists(legacyHome);
-  if (!legacyExists) {
-    return;
-  }
+  const legacyHomes = [getLegacyLocalCodexHome(cwd), getLegacyWorkspaceCodexHome(cwd)].filter(
+    (item): item is string => Boolean(item)
+  );
 
   await fs.mkdir(codexHome, { recursive: true });
 
   const filesToMigrate = ['auth.json', 'config.toml', 'devmanager-settings.json', 'models_cache.json'];
   const dirsToMigrate = ['sessions', 'skills', 'tmp'];
 
-  for (const fileName of filesToMigrate) {
-    await copyIfMissing(path.join(legacyHome, fileName), path.join(codexHome, fileName));
-  }
-  for (const dirName of dirsToMigrate) {
-    await copyIfMissing(path.join(legacyHome, dirName), path.join(codexHome, dirName));
+  for (const legacyHome of legacyHomes) {
+    const normalizedLegacy = path.resolve(legacyHome);
+    if (normalizedLegacy === normalizedTarget) {
+      continue;
+    }
+
+    const legacyExists = await pathExists(legacyHome);
+    if (!legacyExists) {
+      continue;
+    }
+
+    for (const fileName of filesToMigrate) {
+      await copyIfMissing(path.join(legacyHome, fileName), path.join(codexHome, fileName));
+    }
+    for (const dirName of dirsToMigrate) {
+      await copyIfMissing(path.join(legacyHome, dirName), path.join(codexHome, dirName));
+    }
   }
 }
 
