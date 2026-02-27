@@ -49,6 +49,25 @@ export interface CodexState {
   mcpServers: CodexMcpServer[];
 }
 
+export interface CodexChatMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: string;
+}
+
+export interface CodexChatSession {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: CodexChatMessage[];
+}
+
+export interface CodexChatStore {
+  activeSessionId: string;
+  sessions: CodexChatSession[];
+}
+
 export interface CodexLoginStartResult {
   started: boolean;
   message: string;
@@ -132,6 +151,113 @@ function getCodexSettingsPath(codexHome: string): string {
 
 function getCodexAuthPath(codexHome: string): string {
   return path.join(codexHome, 'auth.json');
+}
+
+function getCodexChatStorePath(codexHome: string): string {
+  return path.join(codexHome, 'chat-sessions.json');
+}
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function trimChatText(input: string): string {
+  return input.replace(/\s+/g, ' ').trim();
+}
+
+function buildSessionTitle(messages: CodexChatMessage[]): string {
+  const firstUser = messages.find((item) => item.role === 'user' && trimChatText(item.content).length > 0);
+  if (!firstUser) {
+    return '새 대화';
+  }
+
+  const normalized = trimChatText(firstUser.content);
+  return normalized.length > 30 ? `${normalized.slice(0, 30)}...` : normalized;
+}
+
+function createDefaultChatSession(): CodexChatSession {
+  const iso = nowIso();
+  return {
+    id: `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    title: '새 대화',
+    createdAt: iso,
+    updatedAt: iso,
+    messages: [
+      {
+        role: 'system',
+        content: 'Codex 패널 준비 완료. 프로젝트 파일을 참고해 질문할 수 있습니다.',
+        timestamp: iso
+      }
+    ]
+  };
+}
+
+function normalizeChatStore(input: unknown): CodexChatStore {
+  if (!input || typeof input !== 'object') {
+    const session = createDefaultChatSession();
+    return { activeSessionId: session.id, sessions: [session] };
+  }
+
+  const parsed = input as { activeSessionId?: string; sessions?: unknown[] };
+  const sessions: CodexChatSession[] = Array.isArray(parsed.sessions)
+    ? parsed.sessions
+        .map((item) => item as Partial<CodexChatSession>)
+        .filter((item) => typeof item.id === 'string' && Array.isArray(item.messages))
+        .map((item) => {
+          const messages: CodexChatMessage[] = (item.messages ?? [])
+            .map((msg) => msg as Partial<CodexChatMessage>)
+            .filter(
+              (msg): msg is CodexChatMessage =>
+                (msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system') &&
+                typeof msg.content === 'string' &&
+                typeof msg.timestamp === 'string'
+            )
+            .slice(-200);
+
+          const createdAt = typeof item.createdAt === 'string' ? item.createdAt : nowIso();
+          const updatedAt = typeof item.updatedAt === 'string' ? item.updatedAt : createdAt;
+          const title = typeof item.title === 'string' && item.title.trim() ? item.title.trim() : buildSessionTitle(messages);
+
+          return {
+            id: item.id!,
+            title: title || '새 대화',
+            createdAt,
+            updatedAt,
+            messages
+          };
+        })
+        .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+        .slice(0, 50)
+    : [];
+
+  if (sessions.length === 0) {
+    const session = createDefaultChatSession();
+    return { activeSessionId: session.id, sessions: [session] };
+  }
+
+  const activeSessionId =
+    typeof parsed.activeSessionId === 'string' && sessions.some((session) => session.id === parsed.activeSessionId)
+      ? parsed.activeSessionId
+      : sessions[0].id;
+
+  return {
+    activeSessionId,
+    sessions
+  };
+}
+
+async function readChatStore(codexHome: string): Promise<CodexChatStore> {
+  const storePath = getCodexChatStorePath(codexHome);
+  const raw = await fs.readFile(storePath, 'utf-8').catch(() => '');
+  const parsed = raw.trim() ? JSON.parse(raw) : null;
+  return normalizeChatStore(parsed);
+}
+
+async function writeChatStore(codexHome: string, store: CodexChatStore): Promise<CodexChatStore> {
+  const normalized = normalizeChatStore(store);
+  const storePath = getCodexChatStorePath(codexHome);
+  await fs.writeFile(storePath, `${JSON.stringify(normalized, null, 2)}\n`, 'utf-8');
+  return normalized;
 }
 
 async function pathExists(targetPath: string): Promise<boolean> {
@@ -745,4 +871,15 @@ export async function runCodex(options: CodexRunOptions): Promise<CodexRunResult
       outputChars: (output || '').length
     }
   };
+}
+
+export async function getCodexChatStore(cwd: string): Promise<CodexChatStore> {
+  const { codexHome } = await ensureCodexHome(cwd);
+  const store = await readChatStore(codexHome).catch(() => normalizeChatStore(null));
+  return writeChatStore(codexHome, store);
+}
+
+export async function saveCodexChatStore(cwd: string, store: CodexChatStore): Promise<CodexChatStore> {
+  const { codexHome } = await ensureCodexHome(cwd);
+  return writeChatStore(codexHome, store);
 }

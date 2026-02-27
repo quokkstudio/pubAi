@@ -134,3 +134,22 @@ export interface CodexState {
   loginMessage: string;
   mcpServers: CodexMcpServer[];
 }
+
+export interface CodexChatMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: string;
+}
+
+export interface CodexChatSession {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: CodexChatMessage[];
+}
+
+export interface CodexChatStore {
+  activeSessionId: string;
+  sessions: CodexChatSession[];
+}

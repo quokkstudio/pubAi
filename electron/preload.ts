@@ -32,6 +32,9 @@ contextBridge.exposeInMainWorld('devManager', {
     attachments?: string[];
   }): Promise<unknown> => ipcRenderer.invoke('codex:run', payload),
   getCodexState: (payload: { projectKey: string }): Promise<unknown> => ipcRenderer.invoke('codex:getState', payload),
+  getCodexChatStore: (payload: { projectKey: string }): Promise<unknown> => ipcRenderer.invoke('codex:getChatStore', payload),
+  saveCodexChatStore: (payload: { projectKey: string; store: unknown }): Promise<unknown> =>
+    ipcRenderer.invoke('codex:saveChatStore', payload),
   startCodexLoginChatGPT: (payload: { projectKey: string }): Promise<unknown> =>
     ipcRenderer.invoke('codex:startLoginChatGPT', payload),
   logoutCodex: (payload: { projectKey: string }): Promise<unknown> => ipcRenderer.invoke('codex:logout', payload),

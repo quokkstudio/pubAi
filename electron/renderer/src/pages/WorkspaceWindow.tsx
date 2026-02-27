@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import type {
+  CodexChatMessage,
+  CodexChatSession,
+  CodexChatStore,
   CodexState,
   CodexRunResult,
   CodexSandboxMode,
@@ -11,12 +14,6 @@ interface WorkspaceWindowProps {
   projectKey: string;
 }
 
-interface ChatMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  timestamp: string;
-}
-
 type DragMode = 'left' | 'right' | null;
 type ChatTab = 'chat' | 'codex';
 
@@ -24,8 +21,85 @@ function nowLabel(): string {
   return new Date().toLocaleTimeString('ko-KR', { hour12: false });
 }
 
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function toLabelFromIso(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return nowLabel();
+  }
+  return date.toLocaleTimeString('ko-KR', { hour12: false });
+}
+
 function toPosixPath(input: string): string {
   return input.replace(/\\/g, '/');
+}
+
+function makeDefaultChatSession(): CodexChatSession {
+  const timestamp = nowIso();
+  return {
+    id: `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    title: '새 대화',
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    messages: [
+      {
+        role: 'system',
+        content: 'Codex 패널 준비 완료. 프로젝트 파일을 참고해 질문할 수 있습니다.',
+        timestamp
+      }
+    ]
+  };
+}
+
+function makeDefaultChatStore(): CodexChatStore {
+  const session = makeDefaultChatSession();
+  return {
+    activeSessionId: session.id,
+    sessions: [session]
+  };
+}
+
+function buildSessionTitle(messages: CodexChatMessage[]): string {
+  const firstUser = messages.find((message) => message.role === 'user' && message.content.trim());
+  if (!firstUser) {
+    return '새 대화';
+  }
+  const normalized = firstUser.content.replace(/\s+/g, ' ').trim();
+  return normalized.length > 30 ? `${normalized.slice(0, 30)}...` : normalized;
+}
+
+function sortSessions(sessions: CodexChatSession[]): CodexChatSession[] {
+  return [...sessions].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+}
+
+function appendMessageToStore(
+  store: CodexChatStore,
+  sessionId: string,
+  role: CodexChatMessage['role'],
+  content: string
+): CodexChatStore {
+  const timestamp = nowIso();
+  const sessions = store.sessions.map((session) => {
+    if (session.id !== sessionId) {
+      return session;
+    }
+
+    const messages = [...session.messages, { role, content, timestamp }].slice(-200);
+    return {
+      ...session,
+      messages,
+      updatedAt: timestamp,
+      title: buildSessionTitle(messages)
+    };
+  });
+
+  return {
+    activeSessionId: sessionId,
+    sessions: sortSessions(sessions).slice(0, 50)
+  };
 }
 
 export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
@@ -45,15 +119,10 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
   const [dirtyFiles, setDirtyFiles] = useState<Record<string, boolean>>({});
   const [savedAt, setSavedAt] = useState('');
   const [busy, setBusy] = useState(false);
+  const [busyLabel, setBusyLabel] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
-  const [codexMessages, setCodexMessages] = useState<ChatMessage[]>([
-    {
-      role: 'system',
-      content: 'Codex 패널 준비 완료. 프로젝트 파일을 참고해 질문할 수 있습니다.',
-      timestamp: nowLabel()
-    }
-  ]);
+  const [chatStore, setChatStore] = useState<CodexChatStore>(makeDefaultChatStore());
   const [prompt, setPrompt] = useState('');
   const [chatTab, setChatTab] = useState<ChatTab>('codex');
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
@@ -69,9 +138,40 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
   const activeFileContent = activeFilePath ? fileBuffers[activeFilePath] ?? '' : '';
   const isDirty = useMemo(() => Boolean(activeFilePath && dirtyFiles[activeFilePath]), [activeFilePath, dirtyFiles]);
   const rootEntries = entriesMap[''] ?? [];
+  const activeSession = useMemo(
+    () => chatStore.sessions.find((session) => session.id === chatStore.activeSessionId) ?? chatStore.sessions[0] ?? null,
+    [chatStore]
+  );
+  const codexMessages = activeSession?.messages ?? [];
 
-  function pushChat(role: ChatMessage['role'], content: string): void {
-    setCodexMessages((prev) => [...prev, { role, content, timestamp: nowLabel() }].slice(-80));
+  async function withBusy<T>(label: string, task: () => Promise<T>): Promise<T> {
+    setBusy(true);
+    setBusyLabel(label);
+    try {
+      return await task();
+    } finally {
+      setBusy(false);
+      setBusyLabel('');
+    }
+  }
+
+  async function persistChatStore(nextStore: CodexChatStore): Promise<void> {
+    if (!api) {
+      return;
+    }
+    await api.saveCodexChatStore({ projectKey, store: nextStore });
+  }
+
+  function pushChat(role: CodexChatMessage['role'], content: string): void {
+    const session = activeSession;
+    const baseStore = chatStore.sessions.length > 0 ? chatStore : makeDefaultChatStore();
+    const sessionId = session?.id ?? baseStore.activeSessionId;
+    const nextStore = appendMessageToStore(baseStore, sessionId, role, content);
+    setChatStore(nextStore);
+    void persistChatStore(nextStore).catch((error) => {
+      const message = error instanceof Error ? error.message : '대화 저장 실패';
+      setErrorMessage(message);
+    });
   }
 
   function getRelativePathFromLocal(absolutePath: string): string | null {
@@ -125,6 +225,14 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
     setCodexBinaryInput(state.codexBinaryPath || 'codex');
   }
 
+  async function loadChatStore(): Promise<void> {
+    if (!api) {
+      return;
+    }
+    const store = await api.getCodexChatStore({ projectKey });
+    setChatStore(store);
+  }
+
   async function openFile(relativePath: string): Promise<void> {
     if (!api) {
       return;
@@ -137,28 +245,22 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
       return;
     }
 
-    setBusy(true);
-    setErrorMessage('');
-    try {
+    await withBusy('파일 여는 중...', async () => {
       const result = await api.workspaceReadFile({ projectKey, relativePath });
       setFileBuffers((prev) => ({ ...prev, [result.relativePath]: result.content }));
       setOpenTabs((prev) => (prev.includes(result.relativePath) ? prev : [...prev, result.relativePath]));
       setActiveFilePath(result.relativePath);
-    } catch (error) {
+    }).catch((error) => {
       const message = error instanceof Error ? error.message : '파일 열기 실패';
       setErrorMessage(message);
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   async function saveFile(): Promise<void> {
     if (!api || !activeFilePath) {
       return;
     }
-    setBusy(true);
-    setErrorMessage('');
-    try {
+    await withBusy('파일 저장 중...', async () => {
       const result = await api.workspaceWriteFile({
         projectKey,
         relativePath: activeFilePath,
@@ -167,26 +269,27 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
       setSavedAt(result.savedAt);
       setDirtyFiles((prev) => ({ ...prev, [result.relativePath]: false }));
       pushChat('system', `파일 저장 완료: ${result.relativePath}`);
-    } catch (error) {
+    }).catch((error) => {
       const message = error instanceof Error ? error.message : '파일 저장 실패';
       setErrorMessage(message);
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   async function runCodexPrompt(): Promise<void> {
-    if (!api || !prompt.trim()) {
+    if (!api || !prompt.trim() || !activeSession) {
       return;
     }
 
     const userPrompt = prompt.trim();
     setPrompt('');
-    pushChat('user', userPrompt);
+    const userStore = appendMessageToStore(chatStore, activeSession.id, 'user', userPrompt);
+    setChatStore(userStore);
+    void persistChatStore(userStore).catch((error) => {
+      const message = error instanceof Error ? error.message : '대화 저장 실패';
+      setErrorMessage(message);
+    });
 
-    setBusy(true);
-    setErrorMessage('');
-    try {
+    await withBusy('Codex 응답 생성 중...', async () => {
       const result = await api.runCodex({
         projectKey,
         prompt: userPrompt,
@@ -197,93 +300,110 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
       });
       setLastUsage(result.usage);
       await loadCodexState();
-      if (result.ok) {
-        pushChat('assistant', result.output || '(빈 응답)');
-      } else {
-        pushChat('system', result.stderr || 'Codex 실행 실패');
-      }
-    } catch (error) {
+
+      const role: CodexChatMessage['role'] = result.ok ? 'assistant' : 'system';
+      const content = result.ok ? result.output || '(빈 응답)' : result.stderr || 'Codex 실행 실패';
+      const nextStore = appendMessageToStore(userStore, userStore.activeSessionId, role, content);
+      setChatStore(nextStore);
+      await persistChatStore(nextStore);
+    }).catch((error) => {
       const message = error instanceof Error ? error.message : 'Codex 실행 실패';
       setErrorMessage(message);
-      pushChat('system', message);
-    } finally {
-      setBusy(false);
-    }
+      const nextStore = appendMessageToStore(userStore, userStore.activeSessionId, 'system', message);
+      setChatStore(nextStore);
+      void persistChatStore(nextStore);
+    });
   }
 
   async function handleCodexLogin(): Promise<void> {
     if (!api) {
       return;
     }
-    setBusy(true);
-    setErrorMessage('');
-    try {
+    await withBusy('Codex 로그인 창 여는 중...', async () => {
       const result = await api.startCodexLoginChatGPT({ projectKey });
       pushChat('system', result.message);
-    } catch (error) {
+    }).catch((error) => {
       const message = error instanceof Error ? error.message : 'Codex ChatGPT 로그인 실패';
       setErrorMessage(message);
       pushChat('system', message);
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   async function handleCodexLogout(): Promise<void> {
     if (!api) {
       return;
     }
-    setBusy(true);
-    setErrorMessage('');
-    try {
+    await withBusy('Codex 로그아웃 처리 중...', async () => {
       const state = await api.logoutCodex({ projectKey });
       setCodexState(state);
       pushChat('system', 'Codex 로그아웃 완료');
-    } catch (error) {
+    }).catch((error) => {
       const message = error instanceof Error ? error.message : 'Codex 로그아웃 실패';
       setErrorMessage(message);
       pushChat('system', message);
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   async function toggleMcpPreset(preset: 'playwright' | 'chrome-devtools', enabled: boolean): Promise<void> {
     if (!api) {
       return;
     }
-    setBusy(true);
-    setErrorMessage('');
-    try {
+    await withBusy(`MCP ${preset} ${enabled ? '활성화' : '비활성화'} 중...`, async () => {
       const state = await api.setCodexMcpPreset({ projectKey, preset, enabled });
       setCodexState(state);
       pushChat('system', `MCP ${preset} ${enabled ? '활성화' : '비활성화'} 완료`);
-    } catch (error) {
+    }).catch((error) => {
       const message = error instanceof Error ? error.message : 'MCP 설정 실패';
       setErrorMessage(message);
       pushChat('system', message);
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   async function handleSaveCodexBinaryPath(): Promise<void> {
     if (!api) {
       return;
     }
-    setBusy(true);
-    setErrorMessage('');
-    try {
+    await withBusy('Codex 경로 저장 중...', async () => {
       const state = await api.setCodexBinaryPath({ projectKey, binaryPath: codexBinaryInput });
       setCodexState(state);
       pushChat('system', `Codex 실행 경로 저장: ${state.codexBinaryPath}`);
-    } catch (error) {
+    }).catch((error) => {
       const message = error instanceof Error ? error.message : 'Codex 경로 저장 실패';
       setErrorMessage(message);
       pushChat('system', message);
-    } finally {
-      setBusy(false);
+    });
+  }
+
+  async function handleCreateNewChat(): Promise<void> {
+    const baseStore = chatStore.sessions.length > 0 ? chatStore : makeDefaultChatStore();
+    const newSession = makeDefaultChatSession();
+    const nextStore: CodexChatStore = {
+      activeSessionId: newSession.id,
+      sessions: [newSession, ...baseStore.sessions].slice(0, 50)
+    };
+
+    setChatStore(nextStore);
+    await withBusy('새 대화 생성 중...', async () => {
+      await persistChatStore(nextStore);
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : '새 대화 생성 실패';
+      setErrorMessage(message);
+    });
+  }
+
+  function selectChatSession(sessionId: string): void {
+    if (!chatStore.sessions.some((session) => session.id === sessionId)) {
+      return;
     }
+    const nextStore = {
+      ...chatStore,
+      activeSessionId: sessionId
+    };
+    setChatStore(nextStore);
+    void persistChatStore(nextStore).catch((error) => {
+      const message = error instanceof Error ? error.message : '대화 선택 저장 실패';
+      setErrorMessage(message);
+    });
   }
 
   function toggleFolder(relativePath: string): void {
@@ -336,11 +456,10 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
   }
 
   useEffect(() => {
-    void loadProject().catch((error) => {
-      const message = error instanceof Error ? error.message : '워크스페이스 로드 실패';
-      setErrorMessage(message);
-    });
-    void loadCodexState().catch((error) => {
+    setErrorMessage('');
+    void withBusy('워크스페이스 불러오는 중...', async () => {
+      await Promise.all([loadProject(), loadCodexState(), loadChatStore()]);
+    }).catch((error) => {
       const message = error instanceof Error ? error.message : 'Codex 상태 확인 실패';
       setErrorMessage(message);
     });
@@ -419,7 +538,18 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
         <aside className="ide-explorer" style={{ width: `${leftWidth}px` }}>
           <div className="ide-panel-header">
             <span>EXPLORER</span>
-            <button className="ghost-btn" onClick={() => void loadProject()}>
+            <button
+              className="ghost-btn"
+              onClick={() =>
+                void withBusy('탐색기 새로고침 중...', async () => {
+                  await loadProject();
+                }).catch((error) => {
+                  const message = error instanceof Error ? error.message : '탐색기 새로고침 실패';
+                  setErrorMessage(message);
+                })
+              }
+              disabled={busy}
+            >
               ↻
             </button>
           </div>
@@ -460,6 +590,7 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
           ))}
         </div>
 
+        {busy && <div className="workspace-busy-banner">진행 중: {busyLabel || '처리 중...'}</div>}
         {errorMessage && <div className="alert-error workspace-error">{errorMessage}</div>}
 
         <textarea
@@ -523,7 +654,18 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
               <button className="settings-menu-item" onClick={() => setSettingsOpen((prev) => !prev)}>
                 Codex 설정 {settingsOpen ? '닫기' : '열기'}
               </button>
-              <button className="settings-menu-item" onClick={() => void loadCodexState()}>
+              <button
+                className="settings-menu-item"
+                onClick={() =>
+                  void withBusy('로그인 상태 확인 중...', async () => {
+                    await loadCodexState();
+                  }).catch((error) => {
+                    const message = error instanceof Error ? error.message : '로그인 상태 확인 실패';
+                    setErrorMessage(message);
+                  })
+                }
+                disabled={busy}
+              >
                 로그인 상태 새로고침
               </button>
               <button className="settings-menu-item" onClick={() => pushChat('system', 'IDE 설정 메뉴는 현재 기본값으로 동작합니다.')}>
@@ -628,6 +770,29 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
             </div>
           )}
 
+          <div className="codex-session-strip">
+            <div className="codex-session-head">
+              <span>대화 목록</span>
+              <button onClick={() => void handleCreateNewChat()} disabled={busy}>
+                새 대화
+              </button>
+            </div>
+            <div className="codex-session-list">
+              {chatStore.sessions.map((session) => (
+                <button
+                  key={session.id}
+                  className={`codex-session-item ${chatStore.activeSessionId === session.id ? 'active' : ''}`}
+                  onClick={() => selectChatSession(session.id)}
+                >
+                  <strong>{session.title || '새 대화'}</strong>
+                  <span>
+                    {toLabelFromIso(session.updatedAt)} · {session.messages.length} msgs
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           {settingsOpen && (
             <div className="codex-settings codex-settings-inline">
               <label>
@@ -669,11 +834,12 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
             {codexMessages.map((message, index) => (
               <div key={`${message.timestamp}-${index}`} className={`chat-msg chat-${message.role}`}>
                 <div className="chat-meta">
-                  {message.role} · {message.timestamp}
+                  {message.role} · {toLabelFromIso(message.timestamp)}
                 </div>
                 <pre>{message.content}</pre>
               </div>
             ))}
+            {busy && chatTab === 'codex' && <div className="chat-working-indicator">작업 중... {busyLabel || '응답 대기'}</div>}
           </div>
 
           <div className="codex-input-row codex-input-vscode">
@@ -696,9 +862,10 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
               onChange={(event) => setPrompt(event.target.value)}
               placeholder="Ask Codex..."
               spellCheck={false}
+              disabled={busy}
             />
             <button onClick={() => void runCodexPrompt()} disabled={busy || !prompt.trim()}>
-              ↑
+              {busy ? '…' : '↑'}
             </button>
           </div>
 
@@ -743,6 +910,7 @@ export default function WorkspaceWindow({ projectKey }: WorkspaceWindowProps) {
             <span>{sandboxMode}</span>
             <span>{codexState?.loggedIn ? 'Logged in' : 'Logged out'}</span>
             <span>{codexState?.codexBinaryDetected ? 'CLI OK' : 'CLI Missing'}</span>
+            <span>{busy ? `진행중: ${busyLabel || '처리중'}` : '상태: Ready'}</span>
             <span>
               사용량 {lastUsage?.inputChars ?? 0}/{lastUsage?.outputChars ?? 0}
             </span>

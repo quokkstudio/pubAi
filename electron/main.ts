@@ -4,11 +4,14 @@ import { existsSync, promises as fs } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import {
   getCodexState,
+  getCodexChatStore,
   startCodexLoginWithChatGPT,
   logoutCodex,
   runCodex,
+  saveCodexChatStore,
   setCodexBinaryPath,
   setMcpPresetEnabled,
+  type CodexChatStore,
   type CodexMcpPreset
 } from '../core/codexEngine';
 import {
@@ -362,6 +365,16 @@ app.whenReady().then(() => {
   ipcMain.handle('codex:getState', async (_, payload: { projectKey: string }) => {
     const detail = await getProjectDetail(projectsRoot, payload.projectKey);
     return getCodexState(detail.summary.localPath);
+  });
+
+  ipcMain.handle('codex:getChatStore', async (_, payload: { projectKey: string }) => {
+    const detail = await getProjectDetail(projectsRoot, payload.projectKey);
+    return getCodexChatStore(detail.summary.localPath);
+  });
+
+  ipcMain.handle('codex:saveChatStore', async (_, payload: { projectKey: string; store: CodexChatStore }) => {
+    const detail = await getProjectDetail(projectsRoot, payload.projectKey);
+    return saveCodexChatStore(detail.summary.localPath, payload.store);
   });
 
   ipcMain.handle('codex:startLoginChatGPT', async (_, payload: { projectKey: string }) => {

@@ -400,6 +400,14 @@ body {
   font-size: 13px;
 }
 
+.workspace-busy-banner {
+  background: #1f3a5f;
+  color: #dfeeff;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-bottom: 1px solid #2d4f7e;
+}
+
 .panel-title {
   border-bottom: 1px solid #1f2b3e;
   padding: 10px 12px;
@@ -866,6 +874,81 @@ body {
 .codex-settings-inline {
   border-bottom: 1px solid #2b2b2b;
   background: #161616;
+}
+
+.codex-session-strip {
+  border-bottom: 1px solid #2b2b2b;
+  background: #141414;
+}
+
+.codex-session-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.codex-session-head button {
+  border: 1px solid #3a3a3a;
+  background: #1d1d1d;
+  color: #e5e7eb;
+  border-radius: 5px;
+  font-size: 11px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+
+.codex-session-head button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.codex-session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 124px;
+  overflow: auto;
+  padding: 0 8px 8px;
+}
+
+.codex-session-item {
+  border: 1px solid #2e2e2e;
+  background: #181818;
+  color: #d1d5db;
+  border-radius: 6px;
+  padding: 6px 8px;
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  gap: 2px;
+}
+
+.codex-session-item strong {
+  font-size: 12px;
+  font-weight: 600;
+  color: #f3f4f6;
+}
+
+.codex-session-item span {
+  font-size: 10px;
+  color: #9ca3af;
+}
+
+.codex-session-item.active {
+  border-color: #2563eb;
+  background: #152239;
+}
+
+.chat-working-indicator {
+  border: 1px dashed #3e5f8f;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: #bcd7ff;
+  background: #101a2a;
 }
 
 .codex-chat-log-vscode {

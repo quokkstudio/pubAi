@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import type {
+  CodexChatStore,
   CodexState,
   CodexRunResult,
   InitialSyncResult,
@@ -38,6 +39,8 @@ interface DevManagerApi {
     attachments?: string[];
   }) => Promise<CodexRunResult>;
   getCodexState: (payload: { projectKey: string }) => Promise<CodexState>;
+  getCodexChatStore: (payload: { projectKey: string }) => Promise<CodexChatStore>;
+  saveCodexChatStore: (payload: { projectKey: string; store: CodexChatStore }) => Promise<CodexChatStore>;
   startCodexLoginChatGPT: (payload: { projectKey: string }) => Promise<{ started: boolean; message: string }>;
   logoutCodex: (payload: { projectKey: string }) => Promise<CodexState>;
   setCodexBinaryPath: (payload: { projectKey: string; binaryPath: string }) => Promise<CodexState>;
